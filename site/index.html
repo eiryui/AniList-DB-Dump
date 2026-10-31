@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AniList-DB-Dump</title>
+<link rel="icon" href="data:,">
 <style>
 :root{color-scheme:dark;--bg:#080a1c;--card:#12152e;--ink:#eaf0ff;--mute:#8f9bbd;--blue:#3db4f2;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928;--w:168px;--h:252px}
 *{box-sizing:border-box}
@@ -60,7 +61,7 @@ footer a{color:var(--blue)}
   <div>
     <h1>AniList-DB-Dump</h1>
     <p class="lead">Weekly SQL dumps of the AniList database. Pick a format, restore, done.</p>
-    <a class="btn" id="rel" href="#">Latest release</a><a class="btn ghost" href="setup/">Setup</a>
+    <a class="btn" id="rel" href="https://github.com/eiryui/AniList-DB-Dump/releases" target="_blank" rel="noopener">Latest release</a><a class="btn ghost" href="setup/">Setup</a>
   </div>
   <div id="card" aria-live="polite">
     <p id="label">Loading</p><p id="value">--</p><p id="sub"></p><div id="bar"></div><div id="dots"></div>
@@ -75,12 +76,12 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const ago=t=>{if(!t)return"never";const m=Math.max(0,Math.round((Date.now()-new Date(t))/6e4));return m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const size=b=>b==null?"--":b>=1e9?(b/1e9).toFixed(2)+" GB":(b/1e6).toFixed(1)+" MB";
 const pick=(o,...k)=>{for(const x of k){const v=o?.[x];if(v!=null&&v!=="")return v}};
-let items=[],i=0,timer,top=null;
+let items=[],i=0,timer,best=null;
 
 /* ---- covers: parse the INSERT lines of sample.sql, fall back to the bundled seed ---- */
 function parseSql(t){const out=[],re=/jsonb_populate_record\(NULL::[^,]+,\s*(E?)'((?:[^']|'')*)'\)/g;let m;
   while((m=re.exec(t))){let s=m[2].replace(/''/g,"'");if(m[1])s=s.replace(/\\\\/g,"\\");try{out.push(JSON.parse(s))}catch{}}return out}
-function norm(o,k){const t=o.title,c=pick(o,"coverImage","cover_image"),sd=pick(o,"startDate","start_date");
+function norm(r,k){const o={...r,...(r.payload&&typeof r.payload==="object"?r.payload:{})},t=o.title,c=pick(o,"coverImage","cover_image"),sd=pick(o,"startDate","start_date");
   return{id:o.id,rank:k+1,
     title:t&&typeof t==="object"?(t.english||t.romaji||t.native):(t||pick(o,"title_english","title_romaji","name")),
     cover:c&&typeof c==="object"?(c.extraLarge||c.large):(c||pick(o,"cover_url","cover_image_large","image")),
@@ -93,7 +94,7 @@ async function showcase(){
   try{const r=await fetch("sample.sql");if(r.ok)list=parseSql(await r.text()).map(norm)}catch{}
   list=list.filter(d=>d.cover&&d.id!=null);
   if(list.length<4)list=(await (await fetch("showcase-seed.json")).json()).map(norm);
-  top=list[0];const h=Math.ceil(list.length/2);
+  best=list[0];const h=Math.ceil(list.length/2);
   fill(E("#r1 .track"),list.slice(0,h));fill(E("#r2 .track"),list.slice(h));
 }
 
@@ -117,12 +118,11 @@ async function load(){
     p.textContent=!s.online?"database offline":old?"status out of date":"database online";
     items=[["Anime in the database",n(a.total),note||("table "+(a.table||"public.anilist_catalog"))],
       ["Highest anime ID","#"+n(a.max_id),note],
-      ["Most popular anime",top?.title||"--",top?"#"+top.id:""],
+      ["Most popular anime",best?.title||"--",best?"#"+best.id:""],
       ["Tables",n(d.tables),d.server?"Postgres "+d.server:""],
       ["Database size",size(d.size_bytes),note],
       ["Latest dump",ago(r.published_at),r.tag?r.tag+" ("+size(r.size)+")":"no release yet"],
       ["Next dump",(s.next_dump||"--").replace(" 00:00 UTC",""),"00:00 UTC"]];
-    if(r.url)E("#rel").href=r.url;
     E("#checked").textContent="Checked "+ago(s.checked_at);
     build();show(Math.min(i,items.length-1));start();
   }catch{const p=E("#pill");p.className="stale";p.textContent="no data yet";
