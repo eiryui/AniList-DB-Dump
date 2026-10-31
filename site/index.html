@@ -46,7 +46,7 @@ h1{margin:22px 0 0;font-size:clamp(2.4rem,8vw,5.4rem);line-height:1.02;letter-sp
 .btn.ghost:hover{border-color:var(--blue);box-shadow:none}
 
 /* stats */
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:980px;margin:clamp(28px,5vw,52px) auto 0;padding:0 var(--pad)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1140px;margin:clamp(28px,5vw,52px) auto 0;padding:0 var(--pad)}
 .stat{position:relative;padding:22px 24px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(160deg,#ffffff12,#ffffff06);backdrop-filter:blur(14px);text-align:left;overflow:hidden;transition:transform .25s,border-color .25s}
 .stat:hover{transform:translateY(-3px);border-color:#3db4f255}
 .stat::after{content:"";position:absolute;inset:auto -20% -60% auto;width:140px;height:140px;border-radius:50%;background:var(--blue);opacity:.07;filter:blur(30px)}
@@ -87,6 +87,7 @@ h1{margin:22px 0 0;font-size:clamp(2.4rem,8vw,5.4rem);line-height:1.02;letter-sp
 footer{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;margin-top:clamp(40px,6vw,72px);padding:22px var(--pad) 28px;border-top:1px solid var(--line);color:var(--mute);font-size:.88rem}
 footer a{color:var(--blue)}
 
+@media(max-width:1020px){.stats{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:860px){.stats{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr)}:root{--w:140px;--h:210px}}
 @media(max-width:520px){.links a:not(.keep){display:none}.grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.track,.orb,h1,#pill::before,.skel{animation:none}.row{overflow-x:auto;transition:none}}
@@ -116,6 +117,7 @@ footer a{color:var(--blue)}
 </section>
 
 <section class="stats" aria-live="polite">
+  <div class="stat"><p class="k">Total anime</p><p class="v" id="v-total"><span class="skel"></span></p><p class="s" id="s-total"></p></div>
   <div class="stat"><p class="k">Database size</p><p class="v" id="v-size"><span class="skel"></span></p><p class="s" id="s-size"></p></div>
   <div class="stat"><p class="k">Latest dump</p><p class="v" id="v-last"><span class="skel"></span></p><p class="s" id="s-last"></p></div>
   <div class="stat"><p class="k">Next dump</p><p class="v" id="v-next"><span class="skel"></span></p><p class="s" id="s-next"></p></div>
@@ -150,6 +152,9 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const ago=t=>{if(!t)return"never";const m=Math.max(0,Math.round((Date.now()-new Date(t))/6e4));return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const bytes=b=>b==null?"--":b>=1e9?(b/1e9).toFixed(2)+" GB":(b/1e6).toFixed(1)+" MB";
 const pick=(o,...k)=>{for(const x of k){const v=o?.[x];if(v!=null&&v!=="")return v}};
+const nf=new Intl.NumberFormat();let shown=null;
+function countUp(n){const el=$("#v-total");if(shown===n)return;const from=shown??0,t0=performance.now(),D=matchMedia("(prefers-reduced-motion:reduce)").matches?0:1200;shown=n;
+  (function f(t){const k=D?1:Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=nf.format(Math.round(from+(n-from)*e));if(k<1)requestAnimationFrame(f)})(t0)}
 const set=(id,v,s)=>{$("#v-"+id).textContent=v;$("#s-"+id).textContent=s||""};
 
 /* ---- covers: parse the INSERT lines of sample.sql, fall back to the bundled seed ---- */
@@ -181,6 +186,9 @@ async function load(){
     const old=(Date.now()-new Date(s.checked_at))>13*36e5,note=s.online?"":"last known value";
     p.className=!s.online?"off":old?"stale":"on";
     p.innerHTML=(!s.online?"Database offline":old?"Status out of date":"Database online")+` <small>\u00b7 checked ${ago(s.checked_at)}</small>`;
+    const a=s.anime||{};
+    if(a.total!=null){countUp(a.total);$("#s-total").textContent=note||(a.max_id!=null?"Highest ID "+nf.format(a.max_id):"in the database")}
+    else set("total","--","not available yet");
     set("size",bytes(d.size_bytes),note||(d.server?"Postgres "+d.server:""));
     set("last",ago(r.published_at),r.tag?r.tag+" \u00b7 "+bytes(r.size):"no release yet");
     const nd=s.next_dump?new Date(s.next_dump.replace(" 00:00 UTC","T00:00:00Z")):null;
@@ -188,7 +196,7 @@ async function load(){
       set("next",nd.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",timeZone:"UTC"}),"00:00 UTC \u00b7 "+(days<=0?"today":days===1?"tomorrow":"in "+days+" days"))}
     else set("next","--","");
   }catch{p.className="stale";p.textContent="No data yet";
-    set("size","--","Run the Status workflow once, see Setup");set("last","--","");set("next","--","")}
+    set("total","--","");set("size","--","Run the Status workflow once, see Setup");set("last","--","");set("next","--","")}
 }
 covers();load();setInterval(load,6e4);
 })();
