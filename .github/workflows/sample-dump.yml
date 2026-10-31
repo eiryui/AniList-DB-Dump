@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 15
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      STATS_TABLE: ${{ vars.STATS_TABLE || 'anime' }}
+      STATS_TABLE: ${{ vars.STATS_TABLE || 'public.anilist_catalog' }}
       STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
       SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}

@@ -74,7 +74,7 @@ Settings > Pages > Source: **GitHub Actions**. Then run **AniList-DB-Dump - Stat
 
 Run **AniList-DB-Dump - Manual**. After that the Saturday schedule takes over and does not depend on the manual runs.
 
-If your table is not called `anime` with an `id` column, set `STATS_TABLE` and `STATS_ID_COLUMN` (below) before running the status and sample workflows.
+The workflows default to the table `public.anilist_catalog` with an `id` column, so no setup is needed if that is yours. If your table is named differently, set `STATS_TABLE` and `STATS_ID_COLUMN` (below) before running the status and sample workflows.
 
 ### Configuration
 
@@ -94,7 +94,7 @@ Variables:
 | `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
 | `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
 | `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
-| `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. If the variable is unset and `public.anime` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
+| `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. The default is built into the Status and Sample dump workflows (`env:` block), so you only set this variable for a different table. If the variable is unset and the default table does not exist, the workflows use the one table that has both the ID and popularity columns and print a warning. If that is ambiguous, the log lists your tables. It must be a repository **Variable**, not a Secret |
 | `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
 | `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
 | `SAMPLE_ORDER_COLUMN` | `popularity` | Column the sample is sorted by, highest first. If the column does not exist the sample falls back to the lowest IDs |
@@ -141,6 +141,7 @@ The default assumes the database only holds public data. If it also holds anythi
 | Pages deploy fails | Pages source is not "GitHub Actions", or Pages is disabled for the org | Fix in Settings > Pages |
 | Landing page says "No stats.json found" | Status workflow has not run | Run it once |
 | Landing page says "status out of date" | Scheduled runs stopped | Check the Actions tab; see the 60-day note below |
+| Log warning: `Table public.anime not found. Using public.anilist_catalog (the only table with the id and popularity columns). Set the STATS_TABLE variable to silence this.` | The workflow did not see a `STATS_TABLE` value, so it looked for `public.anime`, missed, and guessed your table. This came from the old default of `anime` in the workflows. Harmless, but it repeated on every run | Fixed: the default in `status.yml` and `sample-dump.yml` is now `public.anilist_catalog`, so the warning is gone once those files are on your default branch. If you still see it, `STATS_TABLE` is probably stored somewhere the workflows cannot read: it must be a repository **Variable** (Settings > Secrets and variables > Actions > Variables tab), not a Secret and not an Environment variable. The name is case-sensitive and the value must be non-empty. Then re-run **Status and site** and **Sample dump** |
 | `relation "public.anime" does not exist` (Sample dump or Status log) | Your table has another name | Set `STATS_TABLE` to it. The log prints the tables it found. Use the exact case, for example `Anime` |
 | Status page shows "--" for anime counts | `STATS_TABLE` or `STATS_ID_COLUMN` is wrong | Set the variables to match your table |
 | Sample workflow fails with "No rows sampled" | Same, or the table is empty | Same fix |

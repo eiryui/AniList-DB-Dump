@@ -38,7 +38,7 @@ SQL
   names=$(cut -d'|' -f1 <<<"$list" | head -n 40 | paste -sd, - | sed 's/,/, /g')
 
   if [ -z "${STATS_TABLE_VAR:-}" ] && [ -n "$matches" ] && [ "$(wc -l <<<"$matches")" -eq 1 ]; then
-    echo "::warning::Table $schema.$tbl not found. Using $matches (the only table with the id and popularity columns). Set the STATS_TABLE variable to silence this."
+    echo "::warning::Table $schema.$tbl not found. Using $matches (the only table with the id and popularity columns). Set the STATS_TABLE repo variable (Settings > Secrets and variables > Actions > Variables tab, not Secrets) to silence this."
     schema=${matches%%.*}; tbl=${matches#*.}
   else
     msg="Table $schema.$tbl does not exist. Set the STATS_TABLE repo variable (Settings > Secrets and variables > Actions > Variables) to your anime table. Tables found: ${names:-none}"
