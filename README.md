@@ -8,7 +8,7 @@ Weekly SQL dump of the Anilist database, published as GitHub Releases.
 | Database | online |
 | Total anime | n/a |
 | Highest anime ID | n/a |
-| Latest release | none yet |
+| Latest release | [manual-2026-10-31-0403](https://github.com/eiryui/AniList-DB-Dump/releases/tag/manual-2026-10-31-0403) |
 | Next dump | 2026-11-07 00:00 UTC |
 | Landing page | https://eiryui.github.io/AniList-DB-Dump/ |
 <!-- STATS:END -->
