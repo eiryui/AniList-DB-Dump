@@ -2,7 +2,7 @@ name: AniList-DB-Dump - Status and site
 
 # Checks the database every 6 hours, rebuilds stats.json, updates the README
 # stats block and deploys the landing page + setup page to GitHub Pages.
-# Also runs after every dump and whenever site/ or setup.md changes.
+# Also runs after every dump and whenever site/ or SETUP.md changes.
 on:
   schedule:
     - cron: "17 */6 * * *"
@@ -12,7 +12,7 @@ on:
     types: [completed]
   push:
     branches: [main, master]
-    paths: ["site/**", "setup.md"]
+    paths: ["site/**", "SETUP.md"]
 
 permissions:
   contents: write
@@ -42,7 +42,7 @@ jobs:
           command -v psql >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq postgresql-client; }
           mkdir -p _site
           cp -r site/. _site/
-          cp setup.md _site/setup.md
+          cp SETUP.md _site/SETUP.md
 
           id='[A-Za-z_][A-Za-z0-9_]*'
           [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ ]] \

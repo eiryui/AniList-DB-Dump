@@ -36,10 +36,10 @@ a{color:var(--blue)}
     <button id="share">Share</button>
     <button id="copylink">Copy link</button>
     <button id="copymd">Copy markdown</button>
-    <a href="../setup.md">Raw</a>
+    <a href="../SETUP.md">Raw</a>
   </div>
 </header>
-<article id="doc">Loading setup.md ...</article>
+<article id="doc">Loading SETUP.md ...</article>
 <div id="toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script>
@@ -48,13 +48,13 @@ const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");setTim
 const copy=async(t,m)=>{try{await navigator.clipboard.writeText(t);toast(m)}catch{toast("Copy failed")}};
 (async()=>{
   try{
-    md=await (await fetch("../setup.md")).text();
+    md=await (await fetch("../SETUP.md")).text();
     $("#doc").innerHTML=marked.parse(md);
     document.querySelectorAll("h1,h2,h3").forEach(h=>{
       h.id=h.textContent.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
       if(h.tagName!=="H1"){const a=document.createElement("a");a.href="#"+h.id;a.textContent="#";a.ariaLabel="Link to this section";h.append(a)}});
     if(location.hash)document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
-  }catch{$("#doc").textContent="Could not load setup.md. Open the Raw link instead."}
+  }catch{$("#doc").textContent="Could not load SETUP.md. Open the Raw link instead."}
 })();
 $("#share").onclick=async()=>{
   const d={title:"AniList-DB-Dump setup",url:location.href};

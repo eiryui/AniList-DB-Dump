@@ -13,6 +13,6 @@ Weekly SQL dump of the Anilist database, published as GitHub Releases.
 | Landing page | run the Status workflow once |
 <!-- STATS:END -->
 
-Setup: [setup.md](setup.md)
+Setup: [SETUP.md](SETUP.md)
 
 License: [WTFPL](LICENSE)

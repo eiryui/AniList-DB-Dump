@@ -67,7 +67,7 @@ Actions tab > **AniList-DB-Dump - Manual** > Run workflow. The status page and R
 
 ## How the status page works
 
-The browser cannot talk to Postgres, so a workflow does it. Every 6 hours, after every dump, and whenever `site/` or `setup.md` changes, the **Status and site** workflow:
+The browser cannot talk to Postgres, so a workflow does it. Every 6 hours, after every dump, and whenever `site/` or `SETUP.md` changes, the **Status and site** workflow:
 
 1. connects to the database and records online or offline,
 2. counts rows in `STATS_TABLE`, finds the min and max `STATS_ID_COLUMN`, database size and table count,
@@ -133,7 +133,7 @@ It refuses to run when source and target are the same. psql errors are printed a
 sample/sample.sql      Sample: table + 20 rows (generated)
 site/index.html       Landing page
 site/setup/index.html Renders this file with share buttons
-setup.md              This file
+SETUP.md              This file
 ```
 
 ## Gotchas
