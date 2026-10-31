@@ -74,6 +74,9 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
 
       - name: Wipe target schemas (optional)
         if: ${{ inputs.wipe_target }}

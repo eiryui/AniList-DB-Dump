@@ -135,7 +135,7 @@ The default assumes the database only holds public data. If it also holds anythi
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Dump fails with "Network is unreachable" or a connection timeout | Direct (IPv6) connection string | Use the Session pooler string on port 5432 |
-| `server version mismatch` from pg_dump | Client older than the server | Raise `PG_VERSION` |
+| `server version mismatch` from pg_dump | The client on PATH is older than the server (the runner ships PostgreSQL 16) | The workflows already put `/usr/lib/postgresql/$PG_VERSION/bin` first. If your server is newer than 17, raise `PG_VERSION` |
 | 403 "Resource not accessible by integration" | Org or enterprise sets workflow permissions to read-only | The workflows request their own permissions, so first try re-running. If it persists, an org owner sets Org settings > Actions > General > Workflow permissions to read and write |
 | README or `sample/sample.sql` not updating, only a warning in the log | Branch protection or a ruleset blocks the bot push | Exempt `github-actions[bot]` or allow it to bypass |
 | Pages deploy fails | Pages source is not "GitHub Actions", or Pages is disabled for the org | Fix in Settings > Pages |

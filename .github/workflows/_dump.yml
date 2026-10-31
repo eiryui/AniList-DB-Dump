@@ -69,7 +69,9 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
-          pg_dump --version
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
 
       - name: Dump database (custom, tar, plain SQL, schema only)
         run: |
