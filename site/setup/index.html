@@ -4,13 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Setup - AniList-DB-Dump</title>
+<link rel="icon" href="../favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<link rel="icon" type="image/png" sizes="512x512" href="../logo.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <style>
 :root{--bg:#edf1f5;--card:#fff;--ink:#1c2733;--mute:#64748b;--blue:#2a8fd0;--line:#d5dde6}
 @media(prefers-color-scheme:dark){:root{--bg:#0f1823;--card:#172332;--ink:#e6edf5;--mute:#8aa0b6;--blue:#3db4f2;--line:#26384c}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,sans-serif}
 header{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding:12px clamp(16px,5vw,48px);background:var(--bg);border-bottom:1px solid var(--line)}
-header a.home{font-weight:700;color:var(--ink);text-decoration:none}
+header a.home{display:inline-flex;align-items:center;gap:10px;font-weight:700;color:var(--ink);text-decoration:none}
 .bar{display:flex;flex-wrap:wrap;gap:8px}
 .bar button,.bar a{padding:6px 14px;border:1px solid var(--blue);border-radius:6px;background:none;color:var(--blue);font:inherit;font-size:.9rem;text-decoration:none;cursor:pointer}
 .bar button:hover,.bar a:hover{background:var(--blue);color:var(--bg)}
@@ -31,7 +35,7 @@ a{color:var(--blue)}
 </head>
 <body>
 <header>
-  <a class="home" href="../">AniList-DB-Dump</a>
+  <a class="home" href="../"><img src="../logo.png" alt="" width="26" height="26" style="border-radius:8px">AniList-DB-Dump</a>
   <div class="bar">
     <button id="share">Share</button>
     <button id="copylink">Copy link</button>

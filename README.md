@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="site/logo.png" alt="AniList-DB-Dump logo" width="128" height="128">
+</p>
+
 # AniList-DB-Dump
 
 Weekly SQL dump of the Anilist database, published as GitHub Releases.

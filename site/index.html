@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AniList-DB-Dump</title>
 <meta name="description" content="Weekly SQL dumps of the AniList database, published as GitHub Releases.">
-<link rel="icon" href="data:,">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="512x512" href="logo.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 :root{color-scheme:dark;--bg:#07091a;--panel:#ffffff0d;--line:#ffffff1c;--ink:#eef2ff;--mute:#94a0c4;--blue:#3db4f2;--violet:#8b6dff;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928;--w:164px;--h:246px;--pad:clamp(16px,5vw,64px)}
 *{box-sizing:border-box}
@@ -21,7 +24,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background-image:radia
 /* nav */
 .nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px var(--pad)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none}
-.logo{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--violet));color:#07101e;font-size:.8rem;font-weight:800}
+.logo{width:30px;height:30px;border-radius:9px;display:block}
 .links{display:flex;align-items:center;gap:6px}
 .links a{padding:7px 14px;border-radius:99px;color:var(--mute);text-decoration:none;font-size:.92rem;transition:color .2s,background .2s}
 .links a:hover{color:var(--ink);background:var(--panel)}
@@ -93,7 +96,7 @@ footer a{color:var(--blue)}
 <i class="orb o1"></i><i class="orb o2"></i>
 
 <nav class="nav">
-  <a class="brand" href="./"><span class="logo">DB</span>AniList-DB-Dump</a>
+  <a class="brand" href="./"><img class="logo" src="logo.png" alt="" width="30" height="30">AniList-DB-Dump</a>
   <div class="links">
     <a class="keep" href="https://github.com/eiryui/AniList-DB-Dump/releases" target="_blank" rel="noopener">Releases</a>
     <a href="setup/">Setup</a>
