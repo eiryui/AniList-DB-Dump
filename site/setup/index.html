@@ -11,6 +11,14 @@
 <link rel="icon" type="image/png" sizes="512x512" href="../logo.png">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <style>
+/* themed scrollbars */
+html{scrollbar-gutter:auto}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#ffffff08}
+::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:99px;background:linear-gradient(180deg,#3db4f2,#8b6dff) padding-box;min-height:40px}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#6cc8f7,#a791ff) padding-box;border-width:1px}
+::-webkit-scrollbar-corner{background:transparent}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:#6a8fe8 #ffffff0a}}
 :root{color-scheme:dark;--bg:#07091a;--panel:#ffffff0d;--panel2:#ffffff14;--line:#ffffff1c;--ink:#eef2ff;--mute:#94a0c4;--blue:#3db4f2;--violet:#8b6dff;--code:#0b1024;--pad:clamp(16px,5vw,64px)}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -50,7 +58,7 @@ header a.home .sep{color:var(--mute);font-weight:400}
 
 /* layout */
 .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(24px,4vw,56px);max-width:1240px;margin:0 auto;padding:24px var(--pad) 96px}
-nav#toc{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;padding-right:8px;font-size:.9rem;scrollbar-width:thin}
+nav#toc{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;padding-right:8px;font-size:.9rem}
 nav#toc b{display:block;margin-bottom:10px;color:var(--mute);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
 nav#toc a{display:block;padding:5px 12px;border-left:2px solid var(--line);color:var(--mute);text-decoration:none;transition:color .2s,border-color .2s,background .2s}
 nav#toc a.h3{padding-left:26px;font-size:.86rem}
@@ -77,7 +85,7 @@ code{padding:.15em .4em;background:var(--panel2);border:1px solid var(--line);bo
 .codebar button{padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:none;color:var(--mute);font:inherit;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer;transition:color .2s,border-color .2s}
 .codebar button:hover{color:var(--ink);border-color:#ffffff3a}
 .codebar button.ok{color:#41c07a;border-color:#41c07a66}
-.codebox pre{margin:0;overflow-x:auto;padding:16px 18px;font-size:.88rem;line-height:1.6;scrollbar-width:thin}
+.codebox pre{margin:0;overflow-x:auto;padding:16px 18px;font-size:.88rem;line-height:1.6}
 .codebox pre code{padding:0;background:none;border:0;font-size:inherit;color:#dbe4ff}
 blockquote{margin:1.2em 0;padding:4px 18px;border-left:3px solid var(--violet);background:#8b6dff14;border-radius:0 12px 12px 0}
 .tablewrap{margin:1.2em 0;overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}

@@ -10,6 +10,14 @@
 <link rel="icon" type="image/png" sizes="512x512" href="logo.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
+/* themed scrollbars */
+html{scrollbar-gutter:auto}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#ffffff08}
+::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:99px;background:linear-gradient(180deg,#3db4f2,#8b6dff) padding-box;min-height:40px}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#6cc8f7,#a791ff) padding-box;border-width:1px}
+::-webkit-scrollbar-corner{background:transparent}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:#6a8fe8 #ffffff0a}}
 :root{color-scheme:dark;--bg:#07091a;--panel:#ffffff0d;--line:#ffffff1c;--ink:#eef2ff;--mute:#94a0c4;--blue:#3db4f2;--violet:#8b6dff;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928;--w:164px;--h:246px;--pad:clamp(16px,5vw,64px)}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
