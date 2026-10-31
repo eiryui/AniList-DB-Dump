@@ -103,6 +103,10 @@ jobs:
           import json, os, re
           s = json.load(open("_site/stats.json"))
           a, r = s["anime"], s["release"]
+          d = s.get("db") or {}
+          def size(b):
+              if not isinstance(b, (int, float)): return "n/a"
+              return f"{b/1e9:.2f} GB" if b >= 1e9 else f"{b/1e6:.1f} MB"
           o, n = os.environ["GITHUB_REPOSITORY"].split("/")
           fmt = lambda v: f"{v:,}" if isinstance(v, int) else "n/a"
           rel = f"[{r['tag']}]({r['url']})" if r.get("tag") else "none yet"
@@ -110,6 +114,7 @@ jobs:
             "| | |", "|---|---|",
             f"| Database | {'online' if s['online'] else 'offline (last known values)'} |",
             f"| Total anime | {fmt(a['total'])} |",
+            f"| Database size | {size(d.get('size_bytes'))} |",
             f"| Highest anime ID | {fmt(a['max_id'])} |",
             f"| Latest release | {rel} |",
             f"| Next dump | {s['next_dump']} |",
