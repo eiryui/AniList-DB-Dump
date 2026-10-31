@@ -21,7 +21,7 @@ html{scrollbar-gutter:auto}
 @supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:#6a8fe8 #ffffff0a}}
 :root{color-scheme:dark;--bg:#07091a;--panel:#ffffff0d;--panel2:#ffffff14;--line:#ffffff1c;--ink:#eef2ff;--mute:#94a0c4;--blue:#3db4f2;--violet:#8b6dff;--code:#0b1024;--pad:clamp(16px,5vw,64px)}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:auto}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}
 a{color:var(--blue)}
 a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:8px}
@@ -58,10 +58,15 @@ header a.home .sep{color:var(--mute);font-weight:400}
 
 /* layout */
 .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(24px,4vw,56px);max-width:1240px;margin:0 auto;padding:24px var(--pad) 96px}
-nav#toc{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;padding-right:8px;font-size:.9rem}
+nav#toc{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow-y:auto;padding-right:8px;font-size:.9rem}
+nav#toc .sub{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s ease}
+nav#toc .sub>div{overflow:hidden}
+nav#toc .grp.open .sub{grid-template-rows:1fr}
+nav#toc .grp.open>a.h2{color:var(--ink)}
 nav#toc b{display:block;margin-bottom:10px;color:var(--mute);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
 nav#toc a{display:block;padding:5px 12px;border-left:2px solid var(--line);color:var(--mute);text-decoration:none;transition:color .2s,border-color .2s,background .2s}
 nav#toc a.h3{padding-left:26px;font-size:.86rem}
+nav#toc a.h2{font-weight:500}
 nav#toc a:hover{color:var(--ink)}
 nav#toc a.on{color:var(--ink);border-left-color:var(--blue);background:linear-gradient(90deg,#3db4f214,transparent)}
 details.mtoc{display:none}
@@ -189,17 +194,33 @@ function enhance(){
 
 function buildToc(){
   const hs=[...$("#doc").querySelectorAll("h2,h3")];
-  const html=hs.map(h=>`<a class="${h.tagName.toLowerCase()}" href="#${h.id}">${h.firstChild.textContent}</a>`).join("");
+  const link=h=>`<a class="${h.tagName.toLowerCase()}" href="#${h.id}">${h.firstChild.textContent}</a>`;
+  // desktop: accordion grouped by h2 (only the active group is open, so the list always fits the viewport)
+  let html="",open=false;
+  for(const h of hs){
+    if(h.tagName==="H2"){if(open)html+="</div></div></div>";html+=`<div class="grp" data-id="${h.id}">${link(h)}<div class="sub"><div>`;open=true}
+    else html+=link(h);
+  }
+  if(open)html+="</div></div></div>";
   $("#toc").innerHTML="<b>On this page</b>"+html;
-  $("#mtoc nav").innerHTML=html;
+  // mobile: flat list
+  $("#mtoc nav").innerHTML=hs.map(link).join("");
   $("#mtoc nav").addEventListener("click",()=>$("#mtoc").open=false);
-  const links=[...document.querySelectorAll("#toc a")];
-  const spy=()=>{
-    let cur=hs[0];for(const h of hs){if(h.getBoundingClientRect().top<140)cur=h}
+
+  const links=[...document.querySelectorAll("#toc a")],groups=[...document.querySelectorAll("#toc .grp")];
+  const tops=()=>hs.map(h=>h.offsetTop);let T=tops(),ticking=false,last=null;
+  addEventListener("resize",()=>{T=tops();spy()});
+  function spy(){
+    ticking=false;
+    const y=scrollY+140;let i=0;for(let k=0;k<T.length;k++){if(T[k]<=y)i=k}
+    const cur=hs[i];if(cur===last)return;last=cur;
+    const grpId=cur.tagName==="H2"?cur.id:hs.slice(0,i).reverse().find(h=>h.tagName==="H2")?.id;
     links.forEach(a=>a.classList.toggle("on",a.getAttribute("href")==="#"+cur.id));
-    const on=$("#toc a.on");if(on&&$("#toc").scrollHeight>$("#toc").clientHeight)on.scrollIntoView({block:"nearest"});
-  };
-  addEventListener("scroll",spy,{passive:true});spy();
+    groups.forEach(g=>g.classList.toggle("open",g.dataset.id===grpId));
+  }
+  addEventListener("scroll",()=>{if(!ticking){ticking=true;requestAnimationFrame(spy)}},{passive:true});
+  addEventListener("load",()=>{T=tops();spy()});
+  spy();
 }
 
 const prog=$("#progress"),top_=$("#top");
@@ -208,6 +229,11 @@ addEventListener("scroll",()=>{
   prog.style.transform=`scaleX(${max>0?Math.min(1,scrollY/max):0})`;
   top_.classList.toggle("on",scrollY>600);
 },{passive:true});
+document.addEventListener("click",e=>{
+  const a=e.target.closest('a[href^="#"]');if(!a)return;
+  const t=document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));if(!t)return;
+  e.preventDefault();t.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});history.replaceState(null,"",a.getAttribute("href"));
+});
 top_.onclick=()=>scrollTo({top:0,behavior:"smooth"});
 
 (async()=>{
