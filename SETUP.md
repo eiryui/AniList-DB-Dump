@@ -94,7 +94,7 @@ Variables:
 | `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
 | `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
 | `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
-| `STATS_TABLE` | `anime` | Table counted on the status page and sampled. `schema.table` works. If the variable is unset and `public.anime` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
+| `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. If the variable is unset and `public.anime` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
 | `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
 | `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
 | `SAMPLE_ORDER_COLUMN` | `popularity` | Column the sample is sorted by, highest first. If the column does not exist the sample falls back to the lowest IDs |
