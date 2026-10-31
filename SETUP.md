@@ -1,124 +1,154 @@
-# AniList-DB-Dump setup
+# AniList-DB-Dump
 
-Weekly and manual SQL dumps of a Supabase Postgres database, stored as GitHub Releases, plus a small status page.
+Weekly and manual `pg_dump` snapshots of a Supabase Postgres database holding AniList data, published as GitHub Releases, plus a status page.
 
-## What you get
+Two audiences:
 
-- A release every Saturday at 00:00 UTC, tagged `weekly-YYYY-MM-DD`.
-- A manual dump button, tagged `manual-YYYY-MM-DD-HHMM`. It is a separate workflow and never resets or skips the Saturday dump.
-- Every dump comes in four SQL formats: `.dump` (pg_dump custom), `.tar` (pg_dump tar), `.sql.gz` (plain SQL) and `-schema.sql` (schema only), plus a `SHA256SUMS` file.
-- A small `sample/sample.sql` committed to the repo: the table definition and 20 rows with their IDs listed.
-- Release notes with creation time, next scheduled update, schemas, Postgres version, size and checksum.
-- A landing page that shows whether the database is online, how many anime it holds, the highest anime ID and more.
-- This page, rendered at `/setup/` with share buttons.
+- **Just want the data?** Read [Using the dumps](#using-the-dumps).
+- **Running your own copy?** Read [Run your own](#run-your-own).
 
-## 1. Create the repo
+## Using the dumps
 
-Push these files to a new GitHub repo. Keep it **private** unless you set an encryption passphrase (step 3): anyone who can read the repo can download the dumps.
+Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, manual ones `manual-YYYY-MM-DD-HHMM`. The newest release is at the top, and its notes show when it was made and when the next scheduled dump is due.
 
-Scheduled workflows and Pages publish from the default branch.
+### Which file?
 
-## 2. Add the database secret
+| File | Use it when |
+|---|---|
+| `*.dump` | You have PostgreSQL and want the fastest, most flexible restore (`pg_restore`). Pick this by default. Supports restoring single tables |
+| `*.sql.gz` | You want plain SQL for `psql`, or to read or process it with other tools |
+| `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
+| `*-schema.sql` | You only want the table structure, no data |
+| `SHA256SUMS-<tag>.txt` | You want to verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
+| `sample/sample.sql` (in the repo) | You want to look at the structure and 20 example rows before downloading anything big |
 
-Add `SUPABASE_DB_URL` under Settings > Secrets and variables > Actions > Secrets.
+### Restore
 
-Use the **Session pooler** string from the Supabase dashboard (Connect):
+Use PostgreSQL 17 client tools or newer. Older `pg_restore` versions can refuse a newer archive.
+
+```bash
+createdb anilist
+pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
+
+# or plain SQL
+gunzip -c anilist-db-dump-<tag>.sql.gz | psql anilist
+```
+
+No local Postgres? Use Docker:
+
+```bash
+docker run -d --name anilist -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17
+docker exec -i anilist createdb -U postgres anilist
+pg_restore --no-owner --no-privileges -d "postgresql://postgres:pw@localhost:5432/anilist" anilist-db-dump-<tag>.dump
+```
+
+Notes:
+
+- The default schema is `public`, so the tables land in `public`. Restore into an empty database.
+- The dump comes from Supabase, so it can contain grants to Supabase roles (`anon`, `authenticated`, `service_role`). On a normal Postgres server `psql` prints harmless "role does not exist" errors. `--no-privileges` avoids them for `pg_restore`.
+- Files ending in `.gpg` are encrypted. Only the repo owner has the passphrase, so ask them. Decrypt with `gpg --decrypt FILE.gpg > FILE`.
+
+### Something not working?
+
+See [Troubleshooting](#troubleshooting).
+
+## Run your own
+
+You need a Supabase project and a GitHub repo (a personal repo or an organization both work). A public repo is the normal setup for public AniList data. See [Private data](#private-data) if yours is not.
+
+### 1. Secret
+
+Add `SUPABASE_DB_URL` as an Actions secret. Use the **Session pooler** string from Supabase (Connect), port 5432:
 
 ```
 postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-The direct connection is IPv6 only and GitHub runners cannot reach it. Use port 5432, not the transaction pooler on 6543.
+The direct connection is IPv6 only and GitHub runners cannot reach it. The transaction pooler (6543) does not work with pg_dump.
 
-## 3. Optional settings
+### 2. Pages
+
+Settings > Pages > Source: **GitHub Actions**. Then run **AniList-DB-Dump - Status and site** once from the Actions tab. The site is at `https://<owner>.github.io/<repo>/` and this file is rendered at `/setup/`.
+
+### 3. First dump
+
+Run **AniList-DB-Dump - Manual**. After that the Saturday schedule takes over and does not depend on the manual runs.
+
+If your table is not called `anime` with an `id` column, set `STATS_TABLE` and `STATS_ID_COLUMN` (below) before running the status and sample workflows.
+
+### Configuration
 
 Secrets:
 
-| Name | What |
-|---|---|
-| `DUMP_ENCRYPTION_PASSPHRASE` | Encrypts dumps with gpg AES256 (`.sql.gz.gpg`) |
-| `SOURCE_DB_URL` | Copy workflow only. Falls back to `SUPABASE_DB_URL` |
-| `TARGET_DB_URL` | Copy workflow only. The database to write into |
+| Name | Required | What |
+|---|---|---|
+| `SUPABASE_DB_URL` | yes | Session pooler connection string |
+| `DUMP_ENCRYPTION_PASSPHRASE` | no | Encrypts every dump file with gpg AES256 (adds `.gpg`). Skip it for public data |
+| `SOURCE_DB_URL` | no | Copy workflow only. Falls back to `SUPABASE_DB_URL` |
+| `TARGET_DB_URL` | no | Copy workflow only. The database to write into |
 
 Variables:
 
 | Name | Default | What |
 |---|---|---|
 | `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
-| `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual ones are never deleted |
+| `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
 | `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
-| `STATS_TABLE` | `anime` | Table counted for the landing page. `schema.table` works |
-| `STATS_ID_COLUMN` | `id` | ID column used for the highest and lowest anime ID |
-| `SAMPLE_SIZE` | `20` | Rows included in `sample/sample.sql` |
+| `STATS_TABLE` | `anime` | Table counted on the status page and sampled. `schema.table` works |
+| `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and for the sample order |
+| `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
 
-## 4. Turn on the status page
+### Workflows
 
-1. Settings > Pages > Source: **GitHub Actions**.
-2. Settings > Actions > General > Workflow permissions: **Read and write**.
-3. Actions tab > **AniList-DB-Dump - Status and site** > Run workflow.
-
-The site then lives at `https://<owner>.github.io/<repo>/`, and the setup page at `/setup/`.
-
-Pages on a private repo needs a paid GitHub plan, and the site is public even if the repo is not. It only exposes counts, sizes and the release link (the release itself stays private). On the free plan the repo must be public, so encrypt your dumps.
-
-## 5. First dump
-
-Actions tab > **AniList-DB-Dump - Manual** > Run workflow. The status page and README refresh by themselves afterwards.
-
-## How the status page works
-
-The browser cannot talk to Postgres, so a workflow does it. Every 6 hours, after every dump, and whenever `site/` or `SETUP.md` changes, the **Status and site** workflow:
-
-1. connects to the database and records online or offline,
-2. counts rows in `STATS_TABLE`, finds the min and max `STATS_ID_COLUMN`, database size and table count,
-3. looks up the latest release,
-4. writes `stats.json`, updates the stats block in `README.md`, and deploys the site.
-
-The landing page cycles through the numbers every few seconds and reloads `stats.json` every minute. If the database is offline it shows the last known values, labelled as such. If the data is older than 13 hours it says the status is out of date.
-
-## Dump formats
-
-| File | Format | Restore with |
+| Workflow | Trigger | Does |
 |---|---|---|
-| `*.dump` | pg_dump custom, compressed | `pg_restore` |
-| `*.tar` | pg_dump tar | `pg_restore` |
-| `*.sql.gz` | plain SQL, gzipped | `psql` |
-| `*-schema.sql` | plain SQL, no data | `psql` |
-| `SHA256SUMS-<tag>.txt` | checksums | `sha256sum -c` |
+| Weekly | cron, Saturday 00:00 UTC | Dump, then release `weekly-YYYY-MM-DD` |
+| Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule |
+| `_dump.yml` | called by the two above | The shared logic. Dumps in four formats, optionally encrypts, writes notes, creates the release, prunes |
+| Status and site | every 6 h, after any dump, on push to `site/` or `SETUP.md` | Checks the database, writes `stats.json`, updates the README block, deploys Pages |
+| Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the first 20 rows by ID, with the IDs listed in a header comment |
+| Copy database | button | Copies live source or a release into `TARGET_DB_URL`. Optional |
 
-The `.dump` is taken from the database once. The `.sql.gz` and schema file are converted from it, so they match. The `.tar` is a second pg_dump moments later. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
+Weekly and Manual share a concurrency group, so overlapping runs queue instead of colliding. Each release notes file lists the creation time and the next scheduled Saturday.
 
-## Sample dump
+Dump formats: one `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the `.sql.gz` and `-schema.sql` files converted from the `.dump` with `pg_restore`, so those three match exactly. The `.tar` is a second pg_dump a moment later. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
 
-The **Sample dump** workflow writes `sample/sample.sql` and commits it. It contains the `CREATE TABLE` for `STATS_TABLE`, then the first 20 rows by ID as `INSERT` statements, with the 20 IDs listed in a comment at the top. SQL only.
+### Status page
 
-It runs after the weekly update, after a manual dump, and from its own Run workflow button. It does not run on the 6-hour status check.
+A browser cannot reach Postgres, so the Status workflow does the check and publishes `stats.json`: online or offline, row count and min and max ID of `STATS_TABLE`, database size, table count, latest release. The landing page cycles through these and reloads every minute. If the database is offline it shows the last known values, labelled as such. If `stats.json` is older than 13 hours it says the status is out of date.
 
-## Restore
+### Copy a database
 
-```bash
-# custom or tar
-pg_restore --no-owner -d "$TARGET_DB_URL" anilist-db-dump-weekly-2026-11-07.dump
+Set `TARGET_DB_URL` (and optionally `SOURCE_DB_URL`), then run **Copy database**. Inputs: `source` (`live` or `release`), `release_tag`, `wipe_target` (drops and recreates the dumped schemas first), and `confirm` (type `COPY`). It refuses to run when source and target match. psql errors are listed at the end; "already exists" noise on Supabase managed objects is normal.
 
-# plain SQL
-gunzip -c anilist-db-dump-weekly-2026-11-07.sql.gz | psql "$TARGET_DB_URL"
+### Private data
 
-# encrypted: decrypt first
-gpg --decrypt FILE.gpg > FILE
-```
+The default assumes the database only holds public data. If it also holds anything private (users, emails, tokens, auth tables), keep the repo private, or set `DUMP_ENCRYPTION_PASSPHRASE`, and remember that `sample/sample.sql`, the README stats and the Pages site are public in a public repo. Pages on a private repo needs a paid GitHub plan and the site is still public.
 
-Restore into an empty database or schema. The dumps have no `DROP` statements.
+## Troubleshooting
 
-## Copy a database to another target
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Dump fails with "Network is unreachable" or a connection timeout | Direct (IPv6) connection string | Use the Session pooler string on port 5432 |
+| `server version mismatch` from pg_dump | Client older than the server | Raise `PG_VERSION` |
+| 403 "Resource not accessible by integration" | Org or enterprise sets workflow permissions to read-only | The workflows request their own permissions, so first try re-running. If it persists, an org owner sets Org settings > Actions > General > Workflow permissions to read and write |
+| README or `sample/sample.sql` not updating, only a warning in the log | Branch protection or a ruleset blocks the bot push | Exempt `github-actions[bot]` or allow it to bypass |
+| Pages deploy fails | Pages source is not "GitHub Actions", or Pages is disabled for the org | Fix in Settings > Pages |
+| Landing page says "No stats.json found" | Status workflow has not run | Run it once |
+| Landing page says "status out of date" | Scheduled runs stopped | Check the Actions tab; see the 60-day note below |
+| Status page shows "--" for anime counts | `STATS_TABLE` or `STATS_ID_COLUMN` is wrong | Set the variables to match your table |
+| Sample workflow fails with "No rows sampled" | Same, or the table is empty | Same fix |
+| `pg_restore` says the archive version is unsupported | Local client too old | Use PostgreSQL 17 tools or newer, or use the `.sql.gz` |
+| Restore prints "role ... does not exist" | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
+| Release upload fails on a large file | Over the 2 GB asset limit | Narrow `DUMP_SCHEMAS`, or drop the `.tar` from `_dump.yml` |
+| Copy workflow says it is refusing | Source equals target, or `confirm` is not `COPY` | Fix the inputs |
 
-Add `TARGET_DB_URL` (and optionally `SOURCE_DB_URL`), then run **AniList-DB-Dump - Copy database** from the Actions tab.
+## Gotchas
 
-- `source = live`: dump `SOURCE_DB_URL` straight into `TARGET_DB_URL`.
-- `source = release`: restore the release named in `release_tag`.
-- `wipe_target`: drop and recreate the listed schemas on the target first. Careful.
-- `confirm`: type `COPY`.
-
-It refuses to run when source and target are the same. psql errors are printed at the end; "already exists" noise on Supabase managed objects is normal.
+- Scheduled runs can start several minutes late and run from the default branch only.
+- GitHub pauses scheduled workflows after 60 days without repo activity in public repos. A commit, or re-enabling the workflows in the Actions tab, fixes it.
+- A dump is not a full Supabase backup. Storage files, Edge Functions and project settings are not included, and auth users only if `auth` is in `DUMP_SCHEMAS`.
+- To change the Saturday schedule, edit the cron line in `weekly-dump.yml` and the next-Saturday logic in `_dump.yml` and `status.yml`.
 
 ## Files
 
@@ -130,18 +160,10 @@ It refuses to run when source and target are the same. psql errors are printed a
   status.yml          Stats, README block, Pages deploy
   sample-dump.yml     Commits sample/sample.sql
   copy-database.yml   Optional copy to another database
-sample/sample.sql      Sample: table + 20 rows (generated)
+sample/sample.sql     Table definition and 20 rows (generated)
 site/index.html       Landing page
 site/setup/index.html Renders this file with share buttons
 SETUP.md              This file
 ```
-
-## Gotchas
-
-- Scheduled runs can start several minutes late.
-- GitHub pauses scheduled workflows after 60 days without repo activity in public repos. A commit or re-enabling it in the Actions tab fixes it.
-- Release assets are limited to 2 GB each.
-- A dump is not a full Supabase backup. Storage files, Edge Functions and project settings are not included, and auth users only if you add `auth` to `DUMP_SCHEMAS`.
-- To change the Saturday schedule, edit the cron line in `weekly-dump.yml` and the next-Saturday logic in `_dump.yml` and `status.yml`.
 
 License: WTFPL.
