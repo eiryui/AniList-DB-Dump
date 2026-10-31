@@ -36,8 +36,8 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background-image:radia
 @keyframes pulse{0%{box-shadow:0 0 0 0 currentColor}70%,100%{box-shadow:0 0 0 8px #0000}}
 #pill.on{color:var(--ok);border-color:#41c07a44}#pill.off{color:var(--bad);border-color:#f0605d44}#pill.stale{color:var(--warn);border-color:#e3a92844}
 #pill small{color:var(--mute);font-size:inherit}
-h1{margin:22px 0 0;font-size:clamp(2.4rem,8vw,5.4rem);line-height:1.02;letter-spacing:-.035em;background:linear-gradient(100deg,#eef2ff 18%,var(--blue) 45%,#b29cff 62%,#eef2ff 82%);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 8s linear infinite}
-@keyframes shine{to{background-position:-260% 0}}
+h1{margin:22px 0 0;font-size:clamp(2.4rem,8vw,5.4rem);line-height:1.02;letter-spacing:-.035em;background:linear-gradient(90deg,#eef2ff 0%,var(--blue) 20%,var(--violet) 40%,#b29cff 55%,var(--blue) 75%,#eef2ff 100%);background-size:200% 100%;background-repeat:repeat-x;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 12s linear infinite;will-change:background-position}
+@keyframes shine{from{background-position:0 0}to{background-position:-200% 0}}
 .lead{max-width:46ch;margin:18px 0 28px;color:var(--mute);font-size:clamp(1rem,2.2vw,1.2rem)}
 .cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:99px;background:linear-gradient(135deg,var(--blue),#6aa9ff);color:#06101c;font-weight:700;text-decoration:none;box-shadow:0 10px 30px #3db4f244;transition:transform .2s,box-shadow .2s}
