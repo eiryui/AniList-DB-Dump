@@ -1,9 +1,9 @@
 name: AniList-DB-Dump - Sample dump
 
-# Commits sample/sample.sql to the repo: the table definition plus the first
-# 20 rows (lowest IDs) as plain SQL, with the 20 IDs listed in the header.
+# Commits sample/sample.sql: the table definition plus the 20 most popular rows
+# (ordered by SAMPLE_ORDER_COLUMN, default popularity) as plain SQL, with the
+# IDs listed in the header. The landing page reads this file for its cover rows.
 # Runs after the weekly update, after a manual dump, and from its own button.
-# It does not run on the 6-hour status check.
 on:
   workflow_dispatch:
   workflow_run:
@@ -27,6 +27,7 @@ jobs:
       STATS_TABLE: ${{ vars.STATS_TABLE || 'anime' }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
       SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}
+      SAMPLE_ORDER_COLUMN: ${{ vars.SAMPLE_ORDER_COLUMN || 'popularity' }}
       PG_VERSION: ${{ vars.PG_VERSION || '17' }}
     steps:
       - uses: actions/checkout@v4
@@ -47,15 +48,32 @@ jobs:
           set -euo pipefail
           export PGCONNECT_TIMEOUT=15
           id='[A-Za-z_][A-Za-z0-9_]*'
-          [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ && "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] \
-            || { echo "Invalid STATS_TABLE, STATS_ID_COLUMN or SAMPLE_SIZE" >&2; exit 1; }
+          [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ && "$SAMPLE_ORDER_COLUMN" =~ ^$id$ && "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] \
+            || { echo "Invalid STATS_TABLE, STATS_ID_COLUMN, SAMPLE_ORDER_COLUMN or SAMPLE_SIZE" >&2; exit 1; }
           schema=public; tbl=$STATS_TABLE
           [[ "$STATS_TABLE" == *.* ]] && { schema=${STATS_TABLE%%.*}; tbl=${STATS_TABLE#*.}; }
-          vars=(-v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v n="$SAMPLE_SIZE")
+          vars=(-v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v ocol="$SAMPLE_ORDER_COLUMN" -v n="$SAMPLE_SIZE")
+
+          # Most popular first if the order column exists, otherwise lowest IDs.
+          has=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+          select 1 from information_schema.columns
+          where table_schema = :'schema' and table_name = :'tbl' and column_name = :'ocol';
+          SQL
+          )
+          if [ -n "$has" ]; then
+            ord="\"$SAMPLE_ORDER_COLUMN\" desc nulls last, \"$STATS_ID_COLUMN\""
+            label="most popular first, by $SAMPLE_ORDER_COLUMN"
+          else
+            ord="\"$STATS_ID_COLUMN\""
+            label="lowest IDs first, column $SAMPLE_ORDER_COLUMN not found"
+          fi
+          vars+=(-v ord="$ord")
 
           ids=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
-          select string_agg(s.id::text, ', ' order by s.id)
-          from (select :"col" as id from :"schema".:"tbl" order by :"col" limit :n) s;
+          with r as (
+            select :"col" as id, row_number() over (order by :ord) as rn
+            from :"schema".:"tbl" order by :ord limit :n)
+          select string_agg(id::text, ', ' order by rn) from r;
           SQL
           )
 
@@ -63,7 +81,7 @@ jobs:
           {
             echo "-- AniList-DB-Dump sample"
             echo "-- table:     ${schema}.${tbl}"
-            echo "-- rows:      first ${SAMPLE_SIZE} by ${STATS_ID_COLUMN}"
+            echo "-- rows:      ${SAMPLE_SIZE} (${label})"
             echo "-- ids:       ${ids}"
             echo "-- generated: $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo
@@ -72,8 +90,7 @@ jobs:
             psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
           select format('INSERT INTO %I.%I SELECT * FROM jsonb_populate_record(NULL::%I.%I, %L);',
                         :'schema', :'tbl', :'schema', :'tbl', to_jsonb(t))
-          from (select * from :"schema".:"tbl" order by :"col" limit :n) t
-          order by t.:"col";
+          from (select * from :"schema".:"tbl" order by :ord limit :n) t;
           SQL
           } > sample/sample.sql
           [ "$(grep -c '^INSERT INTO' sample/sample.sql)" -gt 0 ] || { echo "No rows sampled." >&2; exit 1; }

@@ -20,7 +20,7 @@ Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, 
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
 | `SHA256SUMS-<tag>.txt` | You want to verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
-| `sample/sample.sql` (in the repo) | You want to look at the structure and 20 example rows before downloading anything big |
+| `sample/sample.sql` (in the repo) | You want to look at the structure and the 20 most popular rows before downloading anything big |
 
 ### Restore
 
@@ -95,8 +95,9 @@ Variables:
 | `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
 | `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
 | `STATS_TABLE` | `anime` | Table counted on the status page and sampled. `schema.table` works |
-| `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and for the sample order |
+| `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
 | `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
+| `SAMPLE_ORDER_COLUMN` | `popularity` | Column the sample is sorted by, highest first. If the column does not exist the sample falls back to the lowest IDs |
 
 ### Workflows
 
@@ -106,7 +107,7 @@ Variables:
 | Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule |
 | `_dump.yml` | called by the two above | The shared logic. Dumps in four formats, optionally encrypts, writes notes, creates the release, prunes |
 | Status and site | every 6 h, after any dump, on push to `site/` or `SETUP.md` | Checks the database, writes `stats.json`, updates the README block, deploys Pages |
-| Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the first 20 rows by ID, with the IDs listed in a header comment |
+| Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the 20 most popular rows, with the IDs listed in a header comment |
 | Copy database | button | Copies live source or a release into `TARGET_DB_URL`. Optional |
 
 Weekly and Manual share a concurrency group, so overlapping runs queue instead of colliding. Each release notes file lists the creation time and the next scheduled Saturday.
@@ -116,6 +117,10 @@ Dump formats: one `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar
 ### Status page
 
 A browser cannot reach Postgres, so the Status workflow does the check and publishes `stats.json`: online or offline, row count and min and max ID of `STATS_TABLE`, database size, table count, latest release. The landing page cycles through these and reloads every minute. If the database is offline it shows the last known values, labelled as such. If `stats.json` is older than 13 hours it says the status is out of date.
+
+### Landing page covers
+
+The two rows of covers (top row scrolling left to right, bottom row right to left) are read from `sample/sample.sql`, which the Status workflow publishes as `sample.sql` next to the page. The browser pulls the JSON out of each `INSERT` line and shows rank, cover, title, format, year and score. It looks for AniList-style fields (`title.english`, `coverImage.extraLarge`, `format`, `seasonYear`, `averageScore`) and also accepts flat snake_case columns. Until the first Sample dump has run, the page falls back to `site/showcase-seed.json`, a bundled copy of the 20 most popular anime.
 
 ### Copy a database
 
@@ -162,8 +167,9 @@ The default assumes the database only holds public data. If it also holds anythi
   copy-database.yml   Optional copy to another database
 sample/sample.sql     Table definition and 20 rows (generated)
 site/index.html       Landing page
+site/showcase-seed.json  Fallback covers until sample.sql exists
 site/setup/index.html Renders this file with share buttons
 SETUP.md              This file
 ```
 
-License: WTFPL.
+License: [WTFPL](http://www.wtfpl.net/)

@@ -8,11 +8,11 @@ on:
     - cron: "17 */6 * * *"
   workflow_dispatch:
   workflow_run:
-    workflows: ["AniList-DB-Dump - Weekly", "AniList-DB-Dump - Manual"]
+    workflows: ["AniList-DB-Dump - Weekly", "AniList-DB-Dump - Manual", "AniList-DB-Dump - Sample dump"]
     types: [completed]
   push:
     branches: [main, master]
-    paths: ["site/**", "SETUP.md"]
+    paths: ["site/**", "SETUP.md", "sample/**"]
 
 permissions:
   contents: write
@@ -43,6 +43,7 @@ jobs:
           mkdir -p _site
           cp -r site/. _site/
           cp SETUP.md _site/SETUP.md
+          if [ -f sample/sample.sql ]; then cp sample/sample.sql _site/sample.sql; fi
 
           id='[A-Za-z_][A-Za-z0-9_]*'
           [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ ]] \

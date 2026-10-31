@@ -5,75 +5,130 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AniList-DB-Dump</title>
 <style>
-:root{--bg:#edf1f5;--card:#fff;--ink:#1c2733;--mute:#64748b;--blue:#2a8fd0;--ok:#1f9d55;--bad:#d64545;--warn:#c98a10}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1823;--card:#172332;--ink:#e6edf5;--mute:#8aa0b6;--blue:#3db4f2;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928}}
+:root{color-scheme:dark;--bg:#080a1c;--card:#12152e;--ink:#eaf0ff;--mute:#8f9bbd;--blue:#3db4f2;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928;--w:168px;--h:252px}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;grid-template-rows:auto 1fr auto;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
-header,footer{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:20px clamp(16px,5vw,48px)}
-h1{margin:0;font-size:1.1rem;font-weight:700}
-#pill{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid currentColor;border-radius:99px;font-size:.9rem;color:var(--mute)}
-#pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif;overflow-x:hidden}
+.orb{position:fixed;z-index:-1;width:46vmax;height:46vmax;border-radius:50%;filter:blur(90px);opacity:.25;animation:drift 24s ease-in-out infinite alternate}
+.o1{background:#3db4f2;top:-20vmax;left:-12vmax}.o2{background:#7a4dff;bottom:-24vmax;right:-14vmax;animation-delay:-10s}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+header,footer{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;padding:18px clamp(16px,5vw,56px);color:var(--mute);font-size:.9rem}
+#pill{display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border:1px solid currentColor;border-radius:99px;color:var(--mute)}
+#pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px #0000}100%{box-shadow:0 0 0 0 #0000}}
 #pill.on{color:var(--ok)}#pill.off{color:var(--bad)}#pill.stale{color:var(--warn)}
-main{display:grid;place-content:center;padding:24px clamp(16px,5vw,48px)}
-#card{min-width:min(86vw,520px);padding:clamp(24px,6vw,56px);background:var(--card);border-left:6px solid var(--blue);border-radius:4px}
-#label{color:var(--mute);margin:0 0 4px}
-#value{margin:0;font:700 clamp(2.6rem,11vw,6rem)/1.05 Georgia,"Iowan Old Style",serif;letter-spacing:-.02em;word-break:break-word;transition:opacity .25s}
-#value.fade{opacity:0}
-#sub{margin:12px 0 0;color:var(--mute);min-height:1.5em}
-#dots{display:flex;gap:8px;margin-top:24px}
-#dots button{width:28px;height:6px;padding:0;border:0;border-radius:3px;background:var(--mute);opacity:.3;cursor:pointer}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:32px;align-items:center;padding:12px clamp(16px,5vw,56px) 28px}
+h1{margin:0;font-size:clamp(2.2rem,6.5vw,4.6rem);line-height:1.05;letter-spacing:-.03em;background:linear-gradient(100deg,#eaf0ff 20%,#3db4f2 45%,#a58bff 60%,#eaf0ff 80%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 7s linear infinite}
+@keyframes shine{to{background-position:-250% 0}}
+.lead{max-width:44ch;margin:12px 0 20px;color:var(--mute);font-size:1.1rem}
+.btn{display:inline-block;margin-right:8px;padding:9px 20px;border-radius:99px;background:var(--blue);color:#06101c;font-weight:700;text-decoration:none;transition:transform .2s,box-shadow .2s}
+.btn.ghost{background:none;color:var(--blue);border:1px solid var(--blue)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px #3db4f255}
+a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+#card{position:relative;padding:28px 30px 24px;border:1px solid #ffffff1c;border-radius:22px;background:#ffffff0a;backdrop-filter:blur(14px);overflow:hidden}
+#label{margin:0;color:var(--mute)}
+#value{margin:2px 0;font:700 clamp(2.4rem,7vw,4.2rem)/1.1 Georgia,serif;letter-spacing:-.02em;font-variant-numeric:tabular-nums;word-break:break-word}
+#sub{margin:0;min-height:1.5em;color:var(--mute)}
+#bar{height:3px;margin-top:18px;border-radius:3px;background:var(--blue);transform-origin:left;animation:fill 4.5s linear forwards}
+@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#dots{display:flex;gap:8px;margin-top:14px}
+#dots button{width:26px;height:6px;padding:0;border:0;border-radius:3px;background:var(--mute);opacity:.3;cursor:pointer}
 #dots button[aria-current=true]{opacity:1;background:var(--blue)}
-a{color:var(--blue)}a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
-footer{color:var(--mute);font-size:.9rem}
+.row{overflow:hidden;padding:9px 0;-webkit-mask:linear-gradient(90deg,#0000,#000 7%,#000 93%,#0000);mask:linear-gradient(90deg,#0000,#000 7%,#000 93%,#0000);animation:in .9s .15s both}
+@keyframes in{from{opacity:0;transform:translateY(24px)}}
+.track{display:flex;width:max-content;animation:ltr var(--d,60s) linear infinite}
+.rtl .track{animation-name:rtl}
+.row:hover .track{animation-play-state:paused}
+@keyframes ltr{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@keyframes rtl{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.card{position:relative;flex:none;width:var(--w);height:var(--h);margin-right:16px;border-radius:18px;overflow:hidden;background:var(--card);color:inherit;text-decoration:none;transition:transform .3s,box-shadow .3s}
+.card:hover{transform:translateY(-6px) scale(1.04);box-shadow:0 18px 40px #000a}
+.card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.card::after{content:"";position:absolute;inset:0;background:linear-gradient(#0000 45%,#050616ea)}
+.rk{position:absolute;top:10px;left:10px;z-index:2;padding:2px 10px;border-radius:9px;background:#0b0d22cc;color:var(--blue);font-weight:700;backdrop-filter:blur(6px)}
+.meta{position:absolute;left:12px;right:12px;bottom:12px;z-index:2}
+.meta b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.25}
+.meta span{color:var(--mute);font-size:.85rem}
+footer a{color:var(--blue)}
+@media(max-width:800px){.hero{grid-template-columns:1fr}:root{--w:140px;--h:210px}}
+@media(prefers-reduced-motion:reduce){.track,#bar,.orb,h1,#pill::before{animation:none}.row{overflow-x:auto;animation:none}}
 </style>
 </head>
 <body>
-<header><h1>AniList-DB-Dump</h1><span id="pill">checking</span></header>
-<main>
-  <section id="card" aria-live="polite">
-    <p id="label">Loading</p><p id="value">--</p><p id="sub"></p><div id="dots"></div>
-  </section>
-</main>
-<footer>
-  <span><a id="rel" href="#">Latest release</a> &nbsp; <a href="setup/">Setup</a></span>
-  <span id="checked"></span>
-</footer>
+<i class="orb o1"></i><i class="orb o2"></i>
+<header><span id="pill">checking</span><span id="checked"></span></header>
+<section class="hero">
+  <div>
+    <h1>AniList-DB-Dump</h1>
+    <p class="lead">Weekly SQL dumps of the AniList database. Pick a format, restore, done.</p>
+    <a class="btn" id="rel" href="#">Latest release</a><a class="btn ghost" href="setup/">Setup</a>
+  </div>
+  <div id="card" aria-live="polite">
+    <p id="label">Loading</p><p id="value">--</p><p id="sub"></p><div id="bar"></div><div id="dots"></div>
+  </div>
+</section>
+<div class="row" id="r1"><div class="track"></div></div>
+<div class="row rtl" id="r2"><div class="track"></div></div>
+<footer><span>Covers: the 20 most popular anime from <a href="sample.sql">sample.sql</a></span><span>Data from AniList</span></footer>
 <script>
-const $=s=>document.querySelector(s), n=v=>v==null?"--":Number(v).toLocaleString();
+const E=s=>document.querySelector(s),n=v=>v==null?"--":Number(v).toLocaleString();
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ago=t=>{if(!t)return"never";const m=Math.max(0,Math.round((Date.now()-new Date(t))/6e4));return m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const size=b=>b==null?"--":b>=1e9?(b/1e9).toFixed(2)+" GB":(b/1e6).toFixed(1)+" MB";
-let items=[],i=0,timer;
-function show(k,anim){i=k;const it=items[i];if(!it)return;const v=$("#value");
-  const set=()=>{$("#label").textContent=it[0];v.textContent=it[1];$("#sub").textContent=it[2]||"";
-    [...$("#dots").children].forEach((d,j)=>d.setAttribute("aria-current",j===i))};
-  if(anim){v.classList.add("fade");setTimeout(()=>{set();v.classList.remove("fade")},250)}else set()}
-function build(){$("#dots").innerHTML="";items.forEach((it,k)=>{const b=document.createElement("button");
-  b.setAttribute("aria-label",it[0]);b.onclick=()=>{show(k,true);start()};$("#dots").append(b)})}
-function start(){clearInterval(timer);if(!matchMedia("(prefers-reduced-motion:reduce)").matches)
-  timer=setInterval(()=>show((i+1)%items.length,true),4500)}
+const pick=(o,...k)=>{for(const x of k){const v=o?.[x];if(v!=null&&v!=="")return v}};
+let items=[],i=0,timer,top=null;
+
+/* ---- covers: parse the INSERT lines of sample.sql, fall back to the bundled seed ---- */
+function parseSql(t){const out=[],re=/jsonb_populate_record\(NULL::[^,]+,\s*(E?)'((?:[^']|'')*)'\)/g;let m;
+  while((m=re.exec(t))){let s=m[2].replace(/''/g,"'");if(m[1])s=s.replace(/\\\\/g,"\\");try{out.push(JSON.parse(s))}catch{}}return out}
+function norm(o,k){const t=o.title,c=pick(o,"coverImage","cover_image"),sd=pick(o,"startDate","start_date");
+  return{id:o.id,rank:k+1,
+    title:t&&typeof t==="object"?(t.english||t.romaji||t.native):(t||pick(o,"title_english","title_romaji","name")),
+    cover:c&&typeof c==="object"?(c.extraLarge||c.large):(c||pick(o,"cover_url","cover_image_large","image")),
+    format:o.format,year:pick(o,"seasonYear","season_year","year")??sd?.year,score:pick(o,"averageScore","average_score","score")}}
+const card=d=>`<a class="card" href="https://anilist.co/anime/${d.id}" target="_blank" rel="noopener"><img src="${esc(d.cover)}" alt="" loading="lazy"><span class="rk">#${d.rank}</span><div class="meta"><b>${esc(d.title)}</b><span>${[d.format,d.year,d.score!=null?"★ "+d.score:""].filter(Boolean).join(" · ")}</span></div></a>`;
+function fill(el,arr){if(!arr.length)return;const cw=innerWidth<800?160:184,k=Math.max(1,Math.ceil(Math.max(innerWidth,screen.width)*1.2/(arr.length*cw)));
+  const one=Array.from({length:k},()=>arr.map(card).join("")).join("");el.innerHTML=one+one;el.style.setProperty("--d",k*arr.length*5+"s")}
+async function showcase(){
+  let list=[];
+  try{const r=await fetch("sample.sql");if(r.ok)list=parseSql(await r.text()).map(norm)}catch{}
+  list=list.filter(d=>d.cover&&d.id!=null);
+  if(list.length<4)list=(await (await fetch("showcase-seed.json")).json()).map(norm);
+  top=list[0];const h=Math.ceil(list.length/2);
+  fill(E("#r1 .track"),list.slice(0,h));fill(E("#r2 .track"),list.slice(h));
+}
+
+/* ---- stat card ---- */
+function roll(el,str){const m=str.match(/^(#?)([\d,]+)$/);
+  if(!m||matchMedia("(prefers-reduced-motion:reduce)").matches){el.textContent=str;return}
+  const to=+m[2].replace(/,/g,""),t0=performance.now();
+  (function f(t){const p=Math.min(1,(t-t0)/900);el.textContent=m[1]+Math.round(to*(1-Math.pow(1-p,3))).toLocaleString();if(p<1)requestAnimationFrame(f)})(t0)}
+function show(k){i=k;const it=items[i];if(!it)return;
+  E("#label").textContent=it[0];roll(E("#value"),it[1]);E("#sub").textContent=it[2]||"";
+  [...E("#dots").children].forEach((d,j)=>d.setAttribute("aria-current",j===i));
+  const b=E("#bar");b.style.animation="none";b.offsetWidth;b.style.animation=""}
+function build(){E("#dots").innerHTML="";items.forEach((it,k)=>{const b=document.createElement("button");
+  b.setAttribute("aria-label",it[0]);b.onclick=()=>{show(k);start()};E("#dots").append(b)})}
+function start(){clearInterval(timer);if(!matchMedia("(prefers-reduced-motion:reduce)").matches)timer=setInterval(()=>show((i+1)%items.length),4500)}
 async function load(){
   try{
     const s=await (await fetch("stats.json?"+Date.now())).json(),a=s.anime||{},d=s.db||{},r=s.release||{};
-    const old=(Date.now()-new Date(s.checked_at))>13*36e5;
-    const p=$("#pill");p.className=!s.online?"off":old?"stale":"on";
+    const old=(Date.now()-new Date(s.checked_at))>13*36e5,p=E("#pill"),note=s.online?"":"last known value";
+    p.className=!s.online?"off":old?"stale":"on";
     p.textContent=!s.online?"database offline":old?"status out of date":"database online";
-    const note=s.online?"":"last known value";
-    items=[
-      ["Anime in the database",n(a.total),note||("table "+(a.table||"anime"))],
+    items=[["Anime in the database",n(a.total),note||("table "+(a.table||"anime"))],
       ["Highest anime ID","#"+n(a.max_id),note],
-      ["ID range",n(a.min_id)+" to "+n(a.max_id),note],
+      ["Most popular anime",top?.title||"--",top?"#"+top.id:""],
       ["Tables",n(d.tables),d.server?"Postgres "+d.server:""],
       ["Database size",size(d.size_bytes),note],
       ["Latest dump",ago(r.published_at),r.tag?r.tag+" ("+size(r.size)+")":"no release yet"],
       ["Next dump",(s.next_dump||"--").replace(" 00:00 UTC",""),"00:00 UTC"]];
-    if(r.url)$("#rel").href=r.url;
-    $("#checked").textContent="Checked "+ago(s.checked_at);
+    if(r.url)E("#rel").href=r.url;
+    E("#checked").textContent="Checked "+ago(s.checked_at);
     build();show(Math.min(i,items.length-1));start();
-  }catch(e){$("#pill").className="stale";$("#pill").textContent="no data yet";
-    $("#label").textContent="No stats.json found";$("#value").textContent="--";
-    $("#sub").textContent="Run the Status workflow once, see Setup."}
+  }catch{const p=E("#pill");p.className="stale";p.textContent="no data yet";
+    E("#label").textContent="No stats.json found";E("#sub").textContent="Run the Status workflow once, see Setup."}
 }
-load();setInterval(load,6e4);
+showcase().catch(()=>{}).then(load);setInterval(load,6e4);
 </script>
 </body>
 </html>
