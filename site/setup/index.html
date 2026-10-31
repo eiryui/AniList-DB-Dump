@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup - AniList-DB-Dump</title>
+<style>
+:root{--bg:#edf1f5;--card:#fff;--ink:#1c2733;--mute:#64748b;--blue:#2a8fd0;--line:#d5dde6}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1823;--card:#172332;--ink:#e6edf5;--mute:#8aa0b6;--blue:#3db4f2;--line:#26384c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+header{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding:12px clamp(16px,5vw,48px);background:var(--bg);border-bottom:1px solid var(--line)}
+header a.home{font-weight:700;color:var(--ink);text-decoration:none}
+.bar{display:flex;flex-wrap:wrap;gap:8px}
+.bar button,.bar a{padding:6px 14px;border:1px solid var(--blue);border-radius:6px;background:none;color:var(--blue);font:inherit;font-size:.9rem;text-decoration:none;cursor:pointer}
+.bar button:hover,.bar a:hover{background:var(--blue);color:var(--bg)}
+article{max-width:76ch;margin:32px auto;padding:0 clamp(16px,5vw,32px) 64px}
+h1,h2,h3{line-height:1.25;scroll-margin-top:72px}
+h2{margin-top:2.2em;padding-top:.6em;border-top:1px solid var(--line)}
+h2 a,h3 a{margin-left:.4em;color:var(--mute);text-decoration:none;opacity:0}
+h2:hover a,h3:hover a,h2 a:focus,h3 a:focus{opacity:1}
+code{padding:.1em .35em;background:var(--card);border-radius:4px;font-size:.9em}
+pre{overflow-x:auto;padding:14px 16px;background:var(--card);border-left:4px solid var(--blue);border-radius:4px}
+pre code{padding:0;background:none}
+table{display:block;overflow-x:auto;border-collapse:collapse}
+th,td{padding:6px 12px;border:1px solid var(--line);text-align:left}
+a{color:var(--blue)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:8px 16px;background:var(--ink);color:var(--bg);border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <a class="home" href="../">AniList-DB-Dump</a>
+  <div class="bar">
+    <button id="share">Share</button>
+    <button id="copylink">Copy link</button>
+    <button id="copymd">Copy markdown</button>
+    <a href="../setup.md">Raw</a>
+  </div>
+</header>
+<article id="doc">Loading setup.md ...</article>
+<div id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);let md="";
+const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
+const copy=async(t,m)=>{try{await navigator.clipboard.writeText(t);toast(m)}catch{toast("Copy failed")}};
+(async()=>{
+  try{
+    md=await (await fetch("../setup.md")).text();
+    $("#doc").innerHTML=marked.parse(md);
+    document.querySelectorAll("h1,h2,h3").forEach(h=>{
+      h.id=h.textContent.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+      if(h.tagName!=="H1"){const a=document.createElement("a");a.href="#"+h.id;a.textContent="#";a.ariaLabel="Link to this section";h.append(a)}});
+    if(location.hash)document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+  }catch{$("#doc").textContent="Could not load setup.md. Open the Raw link instead."}
+})();
+$("#share").onclick=async()=>{
+  const d={title:"AniList-DB-Dump setup",url:location.href};
+  if(navigator.share){try{await navigator.share(d)}catch{}}else copy(d.url,"Link copied")};
+$("#copylink").onclick=()=>copy(location.href,"Link copied");
+$("#copymd").onclick=()=>copy(md,"Markdown copied");
+</script>
+</body>
+</html>

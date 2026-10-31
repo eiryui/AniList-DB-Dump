@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AniList-DB-Dump</title>
+<style>
+:root{--bg:#edf1f5;--card:#fff;--ink:#1c2733;--mute:#64748b;--blue:#2a8fd0;--ok:#1f9d55;--bad:#d64545;--warn:#c98a10}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1823;--card:#172332;--ink:#e6edf5;--mute:#8aa0b6;--blue:#3db4f2;--ok:#41c07a;--bad:#f0605d;--warn:#e3a928}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;grid-template-rows:auto 1fr auto;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+header,footer{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:20px clamp(16px,5vw,48px)}
+h1{margin:0;font-size:1.1rem;font-weight:700}
+#pill{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid currentColor;border-radius:99px;font-size:.9rem;color:var(--mute)}
+#pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+#pill.on{color:var(--ok)}#pill.off{color:var(--bad)}#pill.stale{color:var(--warn)}
+main{display:grid;place-content:center;padding:24px clamp(16px,5vw,48px)}
+#card{min-width:min(86vw,520px);padding:clamp(24px,6vw,56px);background:var(--card);border-left:6px solid var(--blue);border-radius:4px}
+#label{color:var(--mute);margin:0 0 4px}
+#value{margin:0;font:700 clamp(2.6rem,11vw,6rem)/1.05 Georgia,"Iowan Old Style",serif;letter-spacing:-.02em;word-break:break-word;transition:opacity .25s}
+#value.fade{opacity:0}
+#sub{margin:12px 0 0;color:var(--mute);min-height:1.5em}
+#dots{display:flex;gap:8px;margin-top:24px}
+#dots button{width:28px;height:6px;padding:0;border:0;border-radius:3px;background:var(--mute);opacity:.3;cursor:pointer}
+#dots button[aria-current=true]{opacity:1;background:var(--blue)}
+a{color:var(--blue)}a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+footer{color:var(--mute);font-size:.9rem}
+</style>
+</head>
+<body>
+<header><h1>AniList-DB-Dump</h1><span id="pill">checking</span></header>
+<main>
+  <section id="card" aria-live="polite">
+    <p id="label">Loading</p><p id="value">--</p><p id="sub"></p><div id="dots"></div>
+  </section>
+</main>
+<footer>
+  <span><a id="rel" href="#">Latest release</a> &nbsp; <a href="setup/">Setup</a></span>
+  <span id="checked"></span>
+</footer>
+<script>
+const $=s=>document.querySelector(s), n=v=>v==null?"--":Number(v).toLocaleString();
+const ago=t=>{if(!t)return"never";const m=Math.max(0,Math.round((Date.now()-new Date(t))/6e4));return m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
+const size=b=>b==null?"--":b>=1e9?(b/1e9).toFixed(2)+" GB":(b/1e6).toFixed(1)+" MB";
+let items=[],i=0,timer;
+function show(k,anim){i=k;const it=items[i];if(!it)return;const v=$("#value");
+  const set=()=>{$("#label").textContent=it[0];v.textContent=it[1];$("#sub").textContent=it[2]||"";
+    [...$("#dots").children].forEach((d,j)=>d.setAttribute("aria-current",j===i))};
+  if(anim){v.classList.add("fade");setTimeout(()=>{set();v.classList.remove("fade")},250)}else set()}
+function build(){$("#dots").innerHTML="";items.forEach((it,k)=>{const b=document.createElement("button");
+  b.setAttribute("aria-label",it[0]);b.onclick=()=>{show(k,true);start()};$("#dots").append(b)})}
+function start(){clearInterval(timer);if(!matchMedia("(prefers-reduced-motion:reduce)").matches)
+  timer=setInterval(()=>show((i+1)%items.length,true),4500)}
+async function load(){
+  try{
+    const s=await (await fetch("stats.json?"+Date.now())).json(),a=s.anime||{},d=s.db||{},r=s.release||{};
+    const old=(Date.now()-new Date(s.checked_at))>13*36e5;
+    const p=$("#pill");p.className=!s.online?"off":old?"stale":"on";
+    p.textContent=!s.online?"database offline":old?"status out of date":"database online";
+    const note=s.online?"":"last known value";
+    items=[
+      ["Anime in the database",n(a.total),note||("table "+(a.table||"anime"))],
+      ["Highest anime ID","#"+n(a.max_id),note],
+      ["ID range",n(a.min_id)+" to "+n(a.max_id),note],
+      ["Tables",n(d.tables),d.server?"Postgres "+d.server:""],
+      ["Database size",size(d.size_bytes),note],
+      ["Latest dump",ago(r.published_at),r.tag?r.tag+" ("+size(r.size)+")":"no release yet"],
+      ["Next dump",(s.next_dump||"--").replace(" 00:00 UTC",""),"00:00 UTC"]];
+    if(r.url)$("#rel").href=r.url;
+    $("#checked").textContent="Checked "+ago(s.checked_at);
+    build();show(Math.min(i,items.length-1));start();
+  }catch(e){$("#pill").className="stale";$("#pill").textContent="no data yet";
+    $("#label").textContent="No stats.json found";$("#value").textContent="--";
+    $("#sub").textContent="Run the Status workflow once, see Setup."}
+}
+load();setInterval(load,6e4);
+</script>
+</body>
+</html>

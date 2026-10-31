@@ -1,0 +1,86 @@
+name: AniList-DB-Dump - Sample dump
+
+# Commits sample/sample.sql to the repo: the table definition plus the first
+# 20 rows (lowest IDs) as plain SQL, with the 20 IDs listed in the header.
+# Runs after the weekly update, after a manual dump, and from its own button.
+# It does not run on the 6-hour status check.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["AniList-DB-Dump - Weekly", "AniList-DB-Dump - Manual"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sample-dump
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      STATS_TABLE: ${{ vars.STATS_TABLE || 'anime' }}
+      STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
+      SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}
+      PG_VERSION: ${{ vars.PG_VERSION || '17' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+
+      - name: Build sample/sample.sql
+        run: |
+          set -euo pipefail
+          export PGCONNECT_TIMEOUT=15
+          id='[A-Za-z_][A-Za-z0-9_]*'
+          [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ && "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] \
+            || { echo "Invalid STATS_TABLE, STATS_ID_COLUMN or SAMPLE_SIZE" >&2; exit 1; }
+          schema=public; tbl=$STATS_TABLE
+          [[ "$STATS_TABLE" == *.* ]] && { schema=${STATS_TABLE%%.*}; tbl=${STATS_TABLE#*.}; }
+          vars=(-v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v n="$SAMPLE_SIZE")
+
+          ids=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+          select string_agg(s.id::text, ', ' order by s.id)
+          from (select :"col" as id from :"schema".:"tbl" order by :"col" limit :n) s;
+          SQL
+          )
+
+          mkdir -p sample
+          {
+            echo "-- AniList-DB-Dump sample"
+            echo "-- table:     ${schema}.${tbl}"
+            echo "-- rows:      first ${SAMPLE_SIZE} by ${STATS_ID_COLUMN}"
+            echo "-- ids:       ${ids}"
+            echo "-- generated: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            pg_dump "$SUPABASE_DB_URL" --schema-only --no-owner --no-privileges --table="${schema}.${tbl}"
+            echo
+            psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+          select format('INSERT INTO %I.%I SELECT * FROM jsonb_populate_record(NULL::%I.%I, %L);',
+                        :'schema', :'tbl', :'schema', :'tbl', to_jsonb(t))
+          from (select * from :"schema".:"tbl" order by :"col" limit :n) t
+          order by t.:"col";
+          SQL
+          } > sample/sample.sql
+          [ "$(grep -c '^INSERT INTO' sample/sample.sql)" -gt 0 ] || { echo "No rows sampled." >&2; exit 1; }
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sample/sample.sql
+          git diff --cached --quiet || { git commit -m "Update sample dump" && git pull --rebase -q && git push; }
