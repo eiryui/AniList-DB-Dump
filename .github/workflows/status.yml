@@ -31,6 +31,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       STATS_TABLE: ${{ vars.STATS_TABLE || 'anime' }}
+      STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +56,7 @@ jobs:
           online=false; row=""
           if psql "$SUPABASE_DB_URL" -X -Atc 'select 1' >/dev/null 2>&1; then
             online=true
+            RESOLVE_SOFT=1 source .github/scripts/resolve-table.sh
             row=$(psql "$SUPABASE_DB_URL" -X -At -F '|' -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" 2>/dev/null <<'SQL'
           select (select count(*) from :"schema".:"tbl"),
                  (select min(:"col") from :"schema".:"tbl"),

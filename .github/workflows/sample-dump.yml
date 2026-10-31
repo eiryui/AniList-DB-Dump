@@ -25,6 +25,7 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       STATS_TABLE: ${{ vars.STATS_TABLE || 'anime' }}
+      STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
       SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}
       SAMPLE_ORDER_COLUMN: ${{ vars.SAMPLE_ORDER_COLUMN || 'popularity' }}
@@ -50,12 +51,11 @@ jobs:
         run: |
           set -euo pipefail
           export PGCONNECT_TIMEOUT=15
-          id='[A-Za-z_][A-Za-z0-9_]*'
-          [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ && "$SAMPLE_ORDER_COLUMN" =~ ^$id$ && "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] \
-            || { echo "Invalid STATS_TABLE, STATS_ID_COLUMN, SAMPLE_ORDER_COLUMN or SAMPLE_SIZE" >&2; exit 1; }
-          schema=public; tbl=$STATS_TABLE
-          [[ "$STATS_TABLE" == *.* ]] && { schema=${STATS_TABLE%%.*}; tbl=${STATS_TABLE#*.}; }
-          vars=(-v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v ocol="$SAMPLE_ORDER_COLUMN" -v n="$SAMPLE_SIZE")
+          export STATS_TABLE_VAR
+          source .github/scripts/resolve-table.sh
+          [[ "$SAMPLE_ORDER_COLUMN" =~ ^$id$ && "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] \
+            || { echo "::error::Invalid SAMPLE_ORDER_COLUMN or SAMPLE_SIZE"; exit 1; }
+          vars=(-v ON_ERROR_STOP=1 -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v ocol="$SAMPLE_ORDER_COLUMN" -v n="$SAMPLE_SIZE")
 
           # Most popular first if the order column exists, otherwise lowest IDs.
           has=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
@@ -88,7 +88,7 @@ jobs:
             echo "-- ids:       ${ids}"
             echo "-- generated: $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo
-            pg_dump "$SUPABASE_DB_URL" --schema-only --no-owner --no-privileges --table="${schema}.${tbl}"
+            pg_dump "$SUPABASE_DB_URL" --schema-only --no-owner --no-privileges --table="\"${schema}\".\"${tbl}\""
             echo
             psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
           select format('INSERT INTO %I.%I SELECT * FROM jsonb_populate_record(NULL::%I.%I, %L);',
