@@ -32,6 +32,12 @@ jobs:
       DUMP_ENCRYPTION_PASSPHRASE: ${{ secrets.DUMP_ENCRYPTION_PASSPHRASE }}
 
     steps:
+      - name: Check out the repo (for .github/scripts)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Compute tag and dates
         run: |
           set -euo pipefail
