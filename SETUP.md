@@ -19,6 +19,8 @@ Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, 
 | `*.sql.gz` | You want plain SQL for `psql`, or to read or process it with other tools |
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
+| `*-csv.zip` | You want spreadsheets, pandas, or any tool that reads CSV. One `schema.table.csv` per table with a header row. Data only. Nested JSON columns are quoted JSON strings |
+| `*-json.zip` | You want JSON for scripts or apps. One `schema.table.jsonl` per table, one JSON object per line (JSON Lines), with nested fields kept as real JSON. Data only |
 | `SHA256SUMS-<tag>.txt` | You want to verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
 | `sample/sample.sql` (in the repo) | You want to look at the structure and the 20 most popular rows before downloading anything big |
 
@@ -105,14 +107,14 @@ Variables:
 |---|---|---|
 | Weekly | cron, Saturday 00:00 UTC | Dump, then release `weekly-YYYY-MM-DD` |
 | Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule |
-| `_dump.yml` | called by the two above | The shared logic. Dumps in four formats, optionally encrypts, writes notes, creates the release, prunes |
+| `_dump.yml` | called by the two above | The shared logic. Dumps in four formats plus CSV and JSON exports, optionally encrypts, writes notes, creates the release, prunes |
 | Status and site | every 6 h, after any dump, on push to `site/` or `SETUP.md` | Checks the database, writes `stats.json`, updates the README block, deploys Pages |
 | Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the 20 most popular rows, with the IDs listed in a header comment |
 | Copy database | button | Copies live source or a release into `TARGET_DB_URL`. Optional |
 
 Weekly and Manual share a concurrency group, so overlapping runs queue instead of colliding. Each release notes file lists the creation time and the next scheduled Saturday.
 
-Dump formats: one `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the `.sql.gz` and `-schema.sql` files converted from the `.dump` with `pg_restore`, so those three match exactly. The `.tar` is a second pg_dump a moment later. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
+Dump formats: one `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the `.sql.gz` and `-schema.sql` files converted from the `.dump` with `pg_restore`, so those three match exactly. The `.tar` is a second pg_dump a moment later. The CSV and JSON zips are exported table by table right after, so they can differ slightly from the `.dump` if the database changes while the workflow runs. They hold data only: no indexes, constraints or types. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
 
 ### Status page
 
@@ -147,7 +149,7 @@ The default assumes the database only holds public data. If it also holds anythi
 | Sample workflow fails with "No rows sampled" | Same, or the table is empty | Same fix |
 | `pg_restore` says the archive version is unsupported | Local client too old | Use PostgreSQL 17 tools or newer, or use the `.sql.gz` |
 | Restore prints "role ... does not exist" | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
-| Release upload fails on a large file | Over the 2 GB asset limit | Narrow `DUMP_SCHEMAS`, or drop the `.tar` from `_dump.yml` |
+| Release upload fails on a large file | Over the 2 GB asset limit | Narrow `DUMP_SCHEMAS`, or drop the `.tar` (or the CSV/JSON export) from `_dump.yml` |
 | Copy workflow says it is refusing | Source equals target, or `confirm` is not `COPY` | Fix the inputs |
 
 ## Gotchas

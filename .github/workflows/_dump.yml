@@ -98,10 +98,42 @@ jobs:
           fi
           echo "SERVER_VERSION=$(psql "$SUPABASE_DB_URL" -Atc 'show server_version' 2>/dev/null || echo unknown)" >> "$GITHUB_ENV"
 
+      - name: Export CSV and JSON (data only)
+        run: |
+          set -euo pipefail
+          mkdir -p csv json
+          count=0
+          IFS=',' read -ra schemas <<< "$DUMP_SCHEMAS"
+          for s in "${schemas[@]}"; do
+            s=$(echo "$s" | xargs)
+            [ -n "$s" ] || continue
+            [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "::error::Invalid schema name: $s"; exit 1; }
+            mapfile -t tables < <(psql "$SUPABASE_DB_URL" -X -Atq \
+              -c "select table_name from information_schema.tables where table_schema = '${s}' and table_type = 'BASE TABLE' order by 1")
+            for t in "${tables[@]}"; do
+              [ -n "$t" ] || continue
+              if ! [[ "$t" =~ ^[A-Za-z0-9_]+$ ]]; then
+                echo "::warning::Skipping CSV/JSON export of ${s}.${t} (unsupported characters in table name)"
+                continue
+              fi
+              # CSV with a header row. Nested JSON columns become quoted JSON strings.
+              psql "$SUPABASE_DB_URL" -X -q \
+                -c "\\copy (select * from \"${s}\".\"${t}\") to 'csv/${s}.${t}.csv' with (format csv, header true)"
+              # JSON Lines: one JSON object per row. Plain psql output (not \copy) so backslashes are not doubled.
+              psql "$SUPABASE_DB_URL" -X -Atq \
+                -c "select row_to_json(x) from \"${s}\".\"${t}\" x" > "json/${s}.${t}.jsonl"
+              count=$((count + 1))
+            done
+          done
+          [ "$count" -gt 0 ] || { echo "::error::No tables found for CSV/JSON export." >&2; exit 1; }
+          (cd csv && zip -q -9 "../${BASENAME}-csv.zip" ./*.csv)
+          (cd json && zip -q -9 "../${BASENAME}-json.zip" ./*.jsonl)
+          echo "Exported ${count} table(s)."
+
       - name: Encrypt (optional) and checksum
         run: |
           set -euo pipefail
-          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql.gz" "${BASENAME}-schema.sql")
+          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql.gz" "${BASENAME}-schema.sql" "${BASENAME}-csv.zip" "${BASENAME}-json.zip")
           encrypted="no"
           : > assets.txt
           for f in "${files[@]}"; do
@@ -133,6 +165,8 @@ jobs:
               *.dump*)        echo "pg_dump custom format (pg_restore)" ;;
               *.tar*)         echo "pg_dump tar format (pg_restore)" ;;
               *-schema.sql*)  echo "plain SQL, schema only" ;;
+              *-csv.zip*)     echo "CSV, one file per table (data only)" ;;
+              *-json.zip*)    echo "JSON Lines, one file per table (data only)" ;;
               *.sql.gz*)      echo "plain SQL, gzipped (psql)" ;;
               *)              echo "checksums" ;;
             esac
@@ -171,6 +205,7 @@ jobs:
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.tar
           # plain SQL
           gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"
+          # CSV / JSON (data only, no schema): unzip FILE-csv.zip or FILE-json.zip
           # encrypted files: run gpg --decrypt FILE.gpg > FILE first
           ```
           NOTES
