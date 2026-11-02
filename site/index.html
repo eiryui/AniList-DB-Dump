@@ -144,8 +144,13 @@ footer a{color:var(--blue)}
     <div class="fmt"><code>.tar</code><p>pg_dump tar format, a second copy a moment later.</p></div>
     <div class="fmt"><code>.sql.gz</code><p>Plain SQL, compressed. Works with <b>psql</b>.</p></div>
     <div class="fmt"><code>.sql.zip</code><p>Plain SQL, zipped. Same content as <b>.sql.gz</b>.</p></div>
+    <div class="fmt"><code>.sql.zst</code><p>Plain SQL, zstd. The smallest SQL download.</p></div>
     <div class="fmt"><code>-schema.sql</code><p>Tables and indexes only, no data.</p></div>
     <div class="fmt"><code>-csv.zip</code><p>One CSV per table. Opens in spreadsheets and <b>pandas</b>.</p></div>
+    <div class="fmt"><code>-tsv.zip</code><p>One tab separated file per table.</p></div>
+    <div class="fmt"><code>-parquet.zip</code><p>One Parquet file per table. Typed, for <b>pandas</b>, <b>DuckDB</b>, Spark.</p></div>
+    <div class="fmt"><code>.sqlite</code><p>One SQLite file. Open it with any SQLite tool.</p></div>
+    <div class="fmt"><code>.duckdb</code><p>One DuckDB file, typed, for analytics.</p></div>
     <div class="fmt"><code>-json.zip</code><p>One JSON Lines file per table. Data only.</p></div>
   </div>
 </section>
