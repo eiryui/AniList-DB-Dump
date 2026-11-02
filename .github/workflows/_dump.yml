@@ -1,0 +1,275 @@
+name: AniList-DB-Dump (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        description: "weekly or manual"
+        required: true
+        type: string
+    secrets:
+      SUPABASE_DB_URL:
+        required: true
+      DUMP_ENCRYPTION_PASSPHRASE:
+        required: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    concurrency:
+      group: supabase-dump
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIND: ${{ inputs.kind }}
+      PG_VERSION: ${{ vars.PG_VERSION || '17' }}
+      DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
+      KEEP_WEEKLY: ${{ vars.KEEP_WEEKLY || '0' }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DUMP_ENCRYPTION_PASSPHRASE: ${{ secrets.DUMP_ENCRYPTION_PASSPHRASE }}
+
+    steps:
+      - name: Compute tag and dates
+        run: |
+          set -euo pipefail
+          date_tag=$(date -u +%F)
+          time_tag=$(date -u +%H%M)
+          if [ "$KIND" = "manual" ]; then
+            tag="manual-${date_tag}-${time_tag}"
+            title="AniList-DB-Dump manual - ${date_tag} ${time_tag} UTC"
+          else
+            tag="weekly-${date_tag}"
+            title="AniList-DB-Dump weekly - ${date_tag}"
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tag="${tag}-$(date -u +%S)"
+          fi
+          dow=$(date -u +%u)
+          add=$(( (6 - dow + 7) % 7 ))
+          [ "$add" -eq 0 ] && add=7
+          next_date=$(date -u -d "+${add} days" +%F)
+          {
+            echo "TAG=$tag"
+            echo "TITLE=$title"
+            echo "CREATED=$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "NEXT_WEEKLY=Saturday ${next_date} 00:00 UTC"
+            echo "BASENAME=anilist-db-dump-${tag}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
+
+      - name: Install zstd
+        run: command -v zstd >/dev/null || sudo apt-get install -y -qq zstd
+
+      - name: Dump database (custom, tar, plain SQL gz, zip and zst, schema only)
+        run: |
+          set -euo pipefail
+          args=(--no-owner)
+          IFS=',' read -ra schemas <<< "$DUMP_SCHEMAS"
+          for s in "${schemas[@]}"; do
+            s=$(echo "$s" | xargs)
+            [ -n "$s" ] && args+=(--schema="$s")
+          done
+
+          # 1. custom format (.dump), the base for pg_restore
+          pg_dump "$SUPABASE_DB_URL" "${args[@]}" --format=custom --compress=9 --file="${BASENAME}.dump"
+          # 2. tar format (.tar)
+          pg_dump "$SUPABASE_DB_URL" "${args[@]}" --format=tar --file="${BASENAME}.tar"
+          # 3. plain SQL made once from the .dump, then compressed three ways: .sql.gz, .sql.zip, .sql.zst
+          #    (one source file, so all three are byte-identical once decompressed)
+          pg_restore --no-owner --file="${BASENAME}.sql" "${BASENAME}.dump"
+          gzip -9 -c "${BASENAME}.sql" > "${BASENAME}.sql.gz"
+          zip -q -9 "${BASENAME}.sql.zip" "${BASENAME}.sql"
+          zstd -19 -T0 -q -o "${BASENAME}.sql.zst" "${BASENAME}.sql"
+          # Rows per table inside the dump (one line per row in COPY blocks), for MANIFEST.json
+          awk '/^COPY /{t=$2; n=0; inb=1; next} inb && /^\\\.$/{gsub(/"/,"",t); print t "\t" n; inb=0; next} inb{n++}' \
+            "${BASENAME}.sql" > dump-counts.tsv
+          rm "${BASENAME}.sql"
+          # 4. schema-only SQL
+          pg_restore --no-owner --schema-only --file="${BASENAME}-schema.sql" "${BASENAME}.dump"
+
+          size=$(stat -c %s "${BASENAME}.dump")
+          if [ "$size" -lt 200 ]; then
+            echo "Dump looks empty ($size bytes), aborting." >&2
+            exit 1
+          fi
+          echo "SERVER_VERSION=$(psql "$SUPABASE_DB_URL" -Atc 'show server_version' 2>/dev/null || echo unknown)" >> "$GITHUB_ENV"
+
+      - name: Export CSV, TSV and JSON (data only)
+        run: |
+          set -euo pipefail
+          mkdir -p csv tsv json
+          count=0
+          IFS=',' read -ra schemas <<< "$DUMP_SCHEMAS"
+          for s in "${schemas[@]}"; do
+            s=$(echo "$s" | xargs)
+            [ -n "$s" ] || continue
+            [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "::error::Invalid schema name: $s"; exit 1; }
+            mapfile -t tables < <(psql "$SUPABASE_DB_URL" -X -Atq \
+              -c "select table_name from information_schema.tables where table_schema = '${s}' and table_type = 'BASE TABLE' order by 1")
+            for t in "${tables[@]}"; do
+              [ -n "$t" ] || continue
+              if ! [[ "$t" =~ ^[A-Za-z0-9_]+$ ]]; then
+                echo "::warning::Skipping CSV/TSV/JSON export of ${s}.${t} (unsupported characters in table name)"
+                continue
+              fi
+              # CSV with a header row. Nested JSON columns become quoted JSON strings.
+              psql "$SUPABASE_DB_URL" -X -q \
+                -c "\\copy (select * from \"${s}\".\"${t}\") to 'csv/${s}.${t}.csv' with (format csv, header true)"
+              # TSV with a header row (CSV quoting rules, tab delimiter).
+              psql "$SUPABASE_DB_URL" -X -q \
+                -c "\\copy (select * from \"${s}\".\"${t}\") to 'tsv/${s}.${t}.tsv' with (format csv, delimiter E'\\t', header true)"
+              # JSON Lines: one JSON object per row. Plain psql output (not \copy) so backslashes are not doubled.
+              psql "$SUPABASE_DB_URL" -X -Atq \
+                -c "select row_to_json(x) from \"${s}\".\"${t}\" x" > "json/${s}.${t}.jsonl"
+              count=$((count + 1))
+            done
+          done
+          [ "$count" -gt 0 ] || { echo "::error::No tables found for CSV/TSV/JSON export." >&2; exit 1; }
+          (cd csv && zip -q -9 "../${BASENAME}-csv.zip" ./*.csv)
+          (cd tsv && zip -q -9 "../${BASENAME}-tsv.zip" ./*.tsv)
+          (cd json && zip -q -9 "../${BASENAME}-json.zip" ./*.jsonl)
+          echo "Exported ${count} table(s)."
+
+      - name: Export Parquet, SQLite and DuckDB (data only)
+        run: |
+          set -euo pipefail
+          python3 -m venv .export-venv
+          .export-venv/bin/pip install --quiet "psycopg[binary]" pyarrow duckdb
+          .export-venv/bin/python .github/scripts/export-formats.py
+
+      - name: Build and check MANIFEST (row counts)
+        run: |
+          set -euo pipefail
+          .export-venv/bin/python .github/scripts/build-manifest.py
+
+      - name: Encrypt (optional) and checksum
+        run: |
+          set -euo pipefail
+          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql.gz" "${BASENAME}-schema.sql" "${BASENAME}.sql.zip" "${BASENAME}.sql.zst" "${BASENAME}-csv.zip" "${BASENAME}-tsv.zip" "${BASENAME}-json.zip" "${BASENAME}-parquet.zip" "${BASENAME}.sqlite" "${BASENAME}.duckdb" "MANIFEST-${TAG}.json")
+          encrypted="no"
+          : > assets.txt
+          for f in "${files[@]}"; do
+            if [ -n "${DUMP_ENCRYPTION_PASSPHRASE:-}" ]; then
+              printf '%s' "$DUMP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes \
+                --pinentry-mode loopback --passphrase-fd 0 \
+                --symmetric --cipher-algo AES256 -o "${f}.gpg" "$f"
+              rm "$f"; f="${f}.gpg"
+              encrypted="yes (AES256, gpg symmetric)"
+            fi
+            echo "$f" >> assets.txt
+          done
+          sums="SHA256SUMS-${TAG}.txt"
+          xargs sha256sum < assets.txt > "$sums"
+          echo "$sums" >> assets.txt
+          echo "ENCRYPTED=$encrypted" >> "$GITHUB_ENV"
+          for f in $(cat assets.txt); do
+            [ "$(stat -c %s "$f")" -lt 2147483648 ] || echo "::warning::$f is over the 2 GB release asset limit and will fail to upload"
+          done
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          if [ "$KIND" = "manual" ]; then kind_line="Manual dump (does not affect the Saturday schedule)"
+          else kind_line="Scheduled weekly dump"; fi
+
+          describe() {
+            case "$1" in
+              *.dump*)        echo "pg_dump custom format (pg_restore)" ;;
+              *.tar*)         echo "pg_dump tar format (pg_restore)" ;;
+              *-schema.sql*)  echo "plain SQL, schema only" ;;
+              *-csv.zip*)     echo "CSV, one file per table (data only)" ;;
+              *-json.zip*)    echo "JSON Lines, one file per table (data only)" ;;
+              *-tsv.zip*)     echo "TSV, one file per table (data only)" ;;
+              *-parquet.zip*) echo "Parquet, one file per table (data only, typed)" ;;
+              *.sqlite*)      echo "SQLite database (data only)" ;;
+              *.duckdb*)      echo "DuckDB database (data only)" ;;
+              MANIFEST-*)     echo "row counts per table in every file, with a match check" ;;
+              *.sql.zst*)     echo "plain SQL, zstd (psql)" ;;
+              *.sql.gz*)      echo "plain SQL, gzipped (psql)" ;;
+              *.sql.zip*)     echo "plain SQL, zipped (psql)" ;;
+              *)              echo "checksums" ;;
+            esac
+          }
+          {
+            echo "## AniList-DB-Dump"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Type** | ${kind_line} |"
+            echo "| **Created** | ${CREATED} |"
+            echo "| **Tag** | \`${TAG}\` |"
+            echo "| **Next scheduled update** | ${NEXT_WEEKLY} |"
+            echo "| **Schemas** | ${DUMP_SCHEMAS} |"
+            echo "| **Postgres server** | ${SERVER_VERSION} |"
+            echo "| **Encrypted** | ${ENCRYPTED} |"
+            echo
+            echo "### Files"
+            echo
+            echo "| File | Format | Size |"
+            echo "|---|---|---|"
+            while read -r f; do
+              echo "| \`$f\` | $(describe "$f") | $(du -h "$f" | cut -f1) |"
+            done < assets.txt
+            echo
+            echo "Verify: \`sha256sum -c SHA256SUMS-${TAG}.txt\`"
+            echo
+            cat manifest-summary.md
+          } > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ### Restore
+
+          ```bash
+          # custom format
+          pg_restore --no-owner -d "$TARGET_DB_URL" FILE.dump
+          # tar format
+          pg_restore --no-owner -d "$TARGET_DB_URL" FILE.tar
+          # plain SQL
+          gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"
+          unzip -p FILE.sql.zip | psql "$TARGET_DB_URL"
+          zstd -dc FILE.sql.zst | psql "$TARGET_DB_URL"
+          # CSV / TSV / JSON / Parquet zips: unzip them. SQLite and DuckDB files open directly.
+          # encrypted files: run gpg --decrypt FILE.gpg > FILE first
+          ```
+          NOTES
+          sed -i 's/^          //' notes.md
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+          latest="--latest=false"
+          [ "$KIND" = "weekly" ] && latest="--latest"
+          mapfile -t assets < assets.txt
+          gh release create "$TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TITLE" --notes-file notes.md "$latest"
+
+      - name: Prune old weekly releases (optional)
+        if: ${{ inputs.kind == 'weekly' }}
+        run: |
+          set -euo pipefail
+          [ "$KEEP_WEEKLY" -gt 0 ] || { echo "KEEP_WEEKLY not set, skipping."; exit 0; }
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,createdAt \
+            | jq -r --argjson keep "$KEEP_WEEKLY" \
+                '[.[] | select(.tagName | startswith("weekly-"))]
+                 | sort_by(.createdAt) | reverse | .[$keep:] | .[].tagName' \
+            | while read -r old; do
+                echo "Deleting $old"
+                gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+              done

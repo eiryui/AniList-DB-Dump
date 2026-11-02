@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup - AniList-DB-Dump</title>
+<meta name="description" content="How to use the AniList-DB-Dump SQL dumps, or run your own copy.">
+<meta name="theme-color" content="#07091a">
+<link rel="icon" href="../favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<link rel="icon" type="image/png" sizes="512x512" href="../logo.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<style>
+/* themed scrollbars */
+html{scrollbar-gutter:auto}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#ffffff08}
+::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:99px;background:linear-gradient(180deg,#3db4f2,#8b6dff) padding-box;min-height:40px}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#6cc8f7,#a791ff) padding-box;border-width:1px}
+::-webkit-scrollbar-corner{background:transparent}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:#6a8fe8 #ffffff0a}}
+:root{color-scheme:dark;--bg:#07091a;--panel:#ffffff0d;--panel2:#ffffff14;--line:#ffffff1c;--ink:#eef2ff;--mute:#94a0c4;--blue:#3db4f2;--violet:#8b6dff;--code:#0b1024;--pad:clamp(16px,5vw,64px)}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}
+a{color:var(--blue)}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:8px}
+::selection{background:#8b6dff55}
+
+/* background */
+.orb{position:fixed;z-index:-1;width:50vmax;height:50vmax;border-radius:50%;filter:blur(110px);opacity:.25;animation:drift 26s ease-in-out infinite alternate;pointer-events:none}
+.o1{background:#2a8fd0;top:-24vmax;left:-14vmax}.o2{background:var(--violet);bottom:-28vmax;right:-16vmax;animation-delay:-11s}
+@keyframes drift{to{transform:translate(7vmax,5vmax) scale(1.12)}}
+
+/* progress */
+#progress{position:fixed;top:0;left:0;height:3px;width:100%;transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,var(--blue),var(--violet));z-index:30}
+
+/* header */
+header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding:12px var(--pad);background:#07091acc;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+header a.home{display:inline-flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;color:var(--ink);text-decoration:none}
+header a.home img{border-radius:8px;display:block}
+header a.home .sep{color:var(--mute);font-weight:400}
+.bar{display:flex;flex-wrap:wrap;gap:8px}
+.bar button,.bar a{padding:7px 14px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--ink);font:inherit;font-size:.88rem;text-decoration:none;cursor:pointer;transition:background .2s,border-color .2s,transform .2s}
+.bar button:hover,.bar a:hover{background:var(--panel2);border-color:#ffffff3a;transform:translateY(-1px)}
+
+/* hero */
+.hero{padding:clamp(32px,6vw,72px) var(--pad) 8px;max-width:1240px;margin:0 auto}
+.hero .kicker{display:inline-block;padding:5px 12px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--mute);font-size:.82rem}
+.hero h1{margin:18px 0 -.12em;font-size:clamp(2.2rem,6.5vw,4.2rem);line-height:1.15;padding-bottom:.12em;letter-spacing:-.035em;background:linear-gradient(90deg,#eef2ff 0%,var(--blue) 20%,var(--violet) 40%,#b29cff 55%,var(--blue) 75%,#eef2ff 100%);background-size:200% 100%;background-repeat:repeat-x;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 12s linear infinite;width:fit-content;max-width:100%}
+@keyframes shine{from{background-position:0 0}to{background-position:-200% 0}}
+.lead{max-width:62ch;color:var(--mute);font-size:1.08rem}
+.lead code{font-size:.85em}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.cta a{padding:10px 18px;border-radius:99px;text-decoration:none;font-weight:600;background:linear-gradient(135deg,var(--blue),var(--violet));color:#07101e;transition:transform .2s,box-shadow .2s}
+.cta a.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.cta a:hover{transform:translateY(-2px);box-shadow:0 8px 24px #3db4f240}
+
+/* layout */
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(24px,4vw,56px);max-width:1240px;margin:0 auto;padding:24px var(--pad) 96px}
+nav#toc{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow-y:auto;padding-right:8px;font-size:.9rem}
+nav#toc .sub{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s ease}
+nav#toc .sub>div{overflow:hidden}
+nav#toc .grp.open .sub{grid-template-rows:1fr}
+nav#toc .grp.open>a.h2{color:var(--ink)}
+nav#toc b{display:block;margin-bottom:10px;color:var(--mute);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+nav#toc a{display:block;padding:5px 12px;border-left:2px solid var(--line);color:var(--mute);text-decoration:none;transition:color .2s,border-color .2s,background .2s}
+nav#toc a.h3{padding-left:26px;font-size:.86rem}
+nav#toc a.h2{font-weight:500}
+nav#toc a:hover{color:var(--ink)}
+nav#toc a.on{color:var(--ink);border-left-color:var(--blue);background:linear-gradient(90deg,#3db4f214,transparent)}
+details.mtoc{display:none}
+
+/* article */
+article{min-width:0;max-width:78ch}
+article>h1{display:none}
+h2,h3{line-height:1.25;scroll-margin-top:84px;letter-spacing:-.02em}
+h2{margin:2.6em 0 .6em;padding-top:1.1em;border-top:1px solid var(--line);font-size:1.7rem}
+article>h2:first-of-type{margin-top:.4em;border-top:0;padding-top:0}
+h3{margin:2em 0 .5em;font-size:1.2rem}
+h2 a,h3 a{margin-left:.4em;color:var(--mute);text-decoration:none;opacity:0;transition:opacity .2s}
+h2:hover a,h3:hover a,h2 a:focus,h3 a:focus{opacity:1}
+p,li{color:#d3dbf3}
+li{margin:.3em 0}
+strong{color:var(--ink)}
+article a{text-underline-offset:3px}
+code{padding:.15em .4em;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font:.86em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.codebox{margin:1.2em 0;border:1px solid var(--line);border-radius:14px;background:var(--code);overflow:hidden}
+.codebar{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 6px 14px;border-bottom:1px solid var(--line);background:#ffffff08;color:var(--mute);font-size:.76rem;letter-spacing:.06em;text-transform:uppercase}
+.codebar button{padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:none;color:var(--mute);font:inherit;font-size:.74rem;text-transform:none;letter-spacing:0;cursor:pointer;transition:color .2s,border-color .2s}
+.codebar button:hover{color:var(--ink);border-color:#ffffff3a}
+.codebar button.ok{color:#41c07a;border-color:#41c07a66}
+.codebox pre{margin:0;overflow-x:auto;padding:16px 18px;font-size:.88rem;line-height:1.6}
+.codebox pre code{padding:0;background:none;border:0;font-size:inherit;color:#dbe4ff}
+blockquote{margin:1.2em 0;padding:4px 18px;border-left:3px solid var(--violet);background:#8b6dff14;border-radius:0 12px 12px 0}
+.tablewrap{margin:1.2em 0;overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+th,td{padding:10px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{background:#ffffff0a;color:var(--ink);font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#ffffff06}
+hr{border:0;border-top:1px solid var(--line);margin:2em 0}
+
+/* back to top + toast */
+#top{position:fixed;right:20px;bottom:20px;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:#0b1024e6;color:var(--ink);font-size:1.1rem;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .25s,transform .25s}
+#top.on{opacity:1;pointer-events:auto;transform:none}
+#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,10px);padding:9px 18px;background:#eef2ff;color:#07091a;font-weight:600;border-radius:99px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:40}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* skeleton */
+.skel{height:14px;margin:14px 0;border-radius:6px;background:linear-gradient(90deg,#ffffff10,#ffffff22,#ffffff10);background-size:200% 100%;animation:sk 1.4s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+
+@media(max-width:900px){
+  .wrap{grid-template-columns:minmax(0,1fr)}
+  nav#toc{display:none}
+  details.mtoc{display:block;margin-bottom:20px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+  details.mtoc summary{padding:12px 16px;cursor:pointer;font-weight:600}
+  details.mtoc nav{padding:0 8px 10px}
+  details.mtoc a{display:block;padding:6px 12px;color:var(--mute);text-decoration:none}
+  details.mtoc a.h3{padding-left:28px;font-size:.92rem}
+  .bar .optional{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="orb o1"></div><div class="orb o2"></div>
+<div id="progress"></div>
+<header>
+  <a class="home" href="../"><img src="../logo.png" alt="" width="28" height="28">AniList-DB-Dump <span class="sep">/ Setup</span></a>
+  <div class="bar">
+    <button id="share" class="optional">Share</button>
+    <button id="copylink">Copy link</button>
+    <button id="copymd">Copy markdown</button>
+    <a href="../SETUP.md">Raw</a>
+  </div>
+</header>
+
+<section class="hero">
+  <span class="kicker">Documentation</span>
+  <h1>Setup guide</h1>
+  <p class="lead" id="lead">Weekly and manual <code>pg_dump</code> snapshots of AniList data, published as GitHub Releases.</p>
+  <div class="cta">
+    <a href="https://github.com/eiryui/AniList-DB-Dump/releases/latest" target="_blank" rel="noopener">Latest release &rarr;</a>
+    <a class="ghost" href="#using-the-dumps">Use the dumps</a>
+    <a class="ghost" href="#run-your-own">Run your own</a>
+    <a class="ghost" href="#troubleshooting">Troubleshooting</a>
+  </div>
+</section>
+
+<div class="wrap">
+  <nav id="toc" aria-label="On this page"></nav>
+  <main>
+    <details class="mtoc" id="mtoc"><summary>On this page</summary><nav></nav></details>
+    <article id="doc"><div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:60%"></div></article>
+  </main>
+</div>
+
+<button id="top" aria-label="Back to top">&uarr;</button>
+<div id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);let md="";
+const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("on"),1800)};
+const copy=async(t,m)=>{try{await navigator.clipboard.writeText(t);toast(m);return true}catch{toast("Copy failed");return false}};
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+
+function enhance(){
+  const doc=$("#doc");
+  // headings: ids + anchors
+  doc.querySelectorAll("h2,h3").forEach(h=>{
+    h.id=slug(h.textContent);
+    const a=document.createElement("a");a.href="#"+h.id;a.textContent="#";a.setAttribute("aria-label","Link to this section");h.append(a);
+  });
+  // lead paragraph from the first paragraph of the markdown
+  const p=doc.querySelector("h1 + p");
+  if(p){$("#lead").innerHTML=p.innerHTML;p.remove()}
+  // code blocks
+  doc.querySelectorAll("pre").forEach(pre=>{
+    const code=pre.querySelector("code");
+    const lang=((code?.className||"").match(/language-(\w+)/)||[])[1]||"text";
+    const box=document.createElement("div");box.className="codebox";
+    const bar=document.createElement("div");bar.className="codebar";
+    const l=document.createElement("span");l.textContent=lang==="bash"||lang==="sh"?"shell":lang;
+    const b=document.createElement("button");b.textContent="Copy";
+    b.onclick=async()=>{if(await copy(code.innerText,"Code copied")){b.textContent="Copied";b.classList.add("ok");setTimeout(()=>{b.textContent="Copy";b.classList.remove("ok")},1600)}};
+    bar.append(l,b);pre.replaceWith(box);box.append(bar,pre);
+  });
+  // tables scroll in a rounded wrapper
+  doc.querySelectorAll("table").forEach(t=>{const w=document.createElement("div");w.className="tablewrap";t.replaceWith(w);w.append(t)});
+  // external links
+  doc.querySelectorAll("a[href^='http']").forEach(a=>{a.target="_blank";a.rel="noopener"});
+}
+
+function buildToc(){
+  const hs=[...$("#doc").querySelectorAll("h2,h3")];
+  const link=h=>`<a class="${h.tagName.toLowerCase()}" href="#${h.id}">${h.firstChild.textContent}</a>`;
+  // desktop: accordion grouped by h2 (only the active group is open, so the list always fits the viewport)
+  let html="",open=false;
+  for(const h of hs){
+    if(h.tagName==="H2"){if(open)html+="</div></div></div>";html+=`<div class="grp" data-id="${h.id}">${link(h)}<div class="sub"><div>`;open=true}
+    else html+=link(h);
+  }
+  if(open)html+="</div></div></div>";
+  $("#toc").innerHTML="<b>On this page</b>"+html;
+  // mobile: flat list
+  $("#mtoc nav").innerHTML=hs.map(link).join("");
+  $("#mtoc nav").addEventListener("click",()=>$("#mtoc").open=false);
+
+  const links=[...document.querySelectorAll("#toc a")],groups=[...document.querySelectorAll("#toc .grp")];
+  const tops=()=>hs.map(h=>h.offsetTop);let T=tops(),ticking=false,last=null;
+  addEventListener("resize",()=>{T=tops();spy()});
+  function spy(){
+    ticking=false;
+    const y=scrollY+140;let i=0;for(let k=0;k<T.length;k++){if(T[k]<=y)i=k}
+    const cur=hs[i];if(cur===last)return;last=cur;
+    const grpId=cur.tagName==="H2"?cur.id:hs.slice(0,i).reverse().find(h=>h.tagName==="H2")?.id;
+    links.forEach(a=>a.classList.toggle("on",a.getAttribute("href")==="#"+cur.id));
+    groups.forEach(g=>g.classList.toggle("open",g.dataset.id===grpId));
+  }
+  addEventListener("scroll",()=>{if(!ticking){ticking=true;requestAnimationFrame(spy)}},{passive:true});
+  addEventListener("load",()=>{T=tops();spy()});
+  spy();
+}
+
+const prog=$("#progress"),top_=$("#top");
+addEventListener("scroll",()=>{
+  const max=document.documentElement.scrollHeight-innerHeight;
+  prog.style.transform=`scaleX(${max>0?Math.min(1,scrollY/max):0})`;
+  top_.classList.toggle("on",scrollY>600);
+},{passive:true});
+document.addEventListener("click",e=>{
+  const a=e.target.closest('a[href^="#"]');if(!a)return;
+  const t=document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));if(!t)return;
+  e.preventDefault();t.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});history.replaceState(null,"",a.getAttribute("href"));
+});
+top_.onclick=()=>scrollTo({top:0,behavior:"smooth"});
+
+(async()=>{
+  try{
+    md=await (await fetch("../SETUP.md")).text();
+    $("#doc").innerHTML=marked.parse(md);
+    enhance();buildToc();
+    if(location.hash)document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+  }catch{$("#doc").innerHTML='Could not load SETUP.md. <a href="../SETUP.md">Open the raw file</a> instead.'}
+})();
+$("#share").onclick=async()=>{
+  const d={title:"AniList-DB-Dump setup",url:location.href};
+  if(navigator.share){try{await navigator.share(d)}catch{}}else copy(d.url,"Link copied")};
+$("#copylink").onclick=()=>copy(location.href,"Link copied");
+$("#copymd").onclick=()=>copy(md,"Markdown copied");
+</script>
+<script src="../cursor.js"></script>
+</body>
+</html>

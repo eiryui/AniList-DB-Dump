@@ -1,0 +1,17 @@
+name: AniList-DB-Dump - Manual
+
+# Click "Run workflow" in the Actions tab. Creates a release tagged
+# manual-YYYY-MM-DD-HHMM. The Saturday schedule is a separate workflow,
+# so running this does NOT reset, move or skip it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    uses: ./.github/workflows/_dump.yml
+    with:
+      kind: manual
+    secrets: inherit

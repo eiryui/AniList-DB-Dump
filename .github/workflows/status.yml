@@ -1,0 +1,146 @@
+name: AniList-DB-Dump - Status and site
+
+# Checks the database every 6 hours, rebuilds stats.json, updates the README
+# stats block and deploys the landing page + setup page to GitHub Pages.
+# Also runs after every dump and whenever site/ or SETUP.md changes.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["AniList-DB-Dump - Weekly", "AniList-DB-Dump - Manual", "AniList-DB-Dump - Sample dump"]
+    types: [completed]
+  push:
+    branches: [main, master]
+    paths: ["site/**", "SETUP.md", "sample/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      STATS_TABLE: ${{ vars.STATS_TABLE || 'public.anilist_catalog' }}
+      STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
+      STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build stats.json
+        run: |
+          set -uo pipefail
+          export PGCONNECT_TIMEOUT=15
+          command -v psql >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y -qq postgresql-client; }
+          mkdir -p _site
+          cp -r site/. _site/
+          cp SETUP.md _site/SETUP.md
+          if [ -f sample/sample.sql ]; then cp sample/sample.sql _site/sample.sql; fi
+
+          id='[A-Za-z_][A-Za-z0-9_]*'
+          [[ "$STATS_TABLE" =~ ^$id(\.$id)?$ && "$STATS_ID_COLUMN" =~ ^$id$ ]] \
+            || { echo "Invalid STATS_TABLE or STATS_ID_COLUMN" >&2; exit 1; }
+          schema=public; tbl=$STATS_TABLE
+          [[ "$STATS_TABLE" == *.* ]] && { schema=${STATS_TABLE%%.*}; tbl=${STATS_TABLE#*.}; }
+          num(){ [[ "${1:-}" =~ ^[0-9]+$ ]] && echo "$1" || echo null; }
+
+          online=false; row=""
+          if psql "$SUPABASE_DB_URL" -X -Atc 'select 1' >/dev/null 2>&1; then
+            online=true
+            RESOLVE_SOFT=1 source .github/scripts/resolve-table.sh
+            row=$(psql "$SUPABASE_DB_URL" -X -At -F '|' -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" 2>/dev/null <<'SQL'
+          select (select count(*) from :"schema".:"tbl"),
+                 (select min(:"col") from :"schema".:"tbl"),
+                 (select max(:"col") from :"schema".:"tbl"),
+                 pg_database_size(current_database()),
+                 (select count(*) from information_schema.tables where table_schema = :'schema' and table_type = 'BASE TABLE'),
+                 current_setting('server_version');
+          SQL
+            ) || row=""
+          fi
+          IFS='|' read -r total minid maxid dbsize tables ver <<< "$row"
+
+          # latest release of any kind
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // empty')
+          rel='{}'
+          if [ -n "$tag" ]; then
+            rel=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json publishedAt,assets | jq -c --arg t "$tag" --arg r "$GITHUB_REPOSITORY" '
+              ([.assets[] | select(.name | test("\\.sql\\.gz(\\.gpg)?$"))][0]) as $a
+              | {tag:$t, url:("https://github.com/"+$r+"/releases/tag/"+$t), published_at:.publishedAt,
+                 size:($a.size // null), download_url:($a.url // null)}')
+          fi
+
+          dow=$(date -u +%u); add=$(( (6 - dow + 7) % 7 )); [ "$add" -eq 0 ] && add=7
+          next="$(date -u -d "+${add} days" +%F) 00:00 UTC"
+
+          prev=$(curl -fsSL --max-time 15 "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/stats.json" 2>/dev/null || echo '{}')
+          jq -e . >/dev/null 2>&1 <<<"$prev" || prev='{}'
+
+          jq -n --argjson online "$online" --arg now "$(date -u +%FT%TZ)" --argjson prev "$prev" \
+            --argjson rel "$rel" --arg next "$next" --arg table "$STATS_TABLE" --arg repo "$GITHUB_REPOSITORY" \
+            --argjson total "$(num "${total:-}")" --argjson minid "$(num "${minid:-}")" --argjson maxid "$(num "${maxid:-}")" \
+            --argjson size "$(num "${dbsize:-}")" --argjson tables "$(num "${tables:-}")" --arg ver "${ver:-}" '
+            {online:$online, checked_at:$now,
+             last_online_at:(if $online then $now else ($prev.last_online_at // null) end),
+             anime:(if $total != null then {table:$table,total:$total,min_id:$minid,max_id:$maxid}
+                    else ($prev.anime // {table:$table,total:null,min_id:null,max_id:null}) end),
+             db:(if $size != null then {size_bytes:$size,tables:$tables,server:$ver} else ($prev.db // null) end),
+             release:$rel, next_dump:$next, repo:$repo}' > _site/stats.json
+          cat _site/stats.json
+
+      - name: Update README stats block
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          s = json.load(open("_site/stats.json"))
+          a, r = s["anime"], s["release"]
+          d = s.get("db") or {}
+          def size(b):
+              if not isinstance(b, (int, float)): return "n/a"
+              return f"{b/1e9:.2f} GB" if b >= 1e9 else f"{b/1e6:.1f} MB"
+          o, n = os.environ["GITHUB_REPOSITORY"].split("/")
+          fmt = lambda v: f"{v:,}" if isinstance(v, int) else "n/a"
+          rel = f"[{r['tag']}]({r['url']})" if r.get("tag") else "none yet"
+          block = "\n".join([
+            "| | |", "|---|---|",
+            f"| Database | {'online' if s['online'] else 'offline (last known values)'} |",
+            f"| Total anime | {fmt(a['total'])} |",
+            f"| Database size | {size(d.get('size_bytes'))} |",
+            f"| Highest anime ID | {fmt(a['max_id'])} |",
+            f"| Latest release | {rel} |",
+            f"| Next dump | {s['next_dump']} |",
+            f"| Landing page | https://{o.lower()}.github.io/{n}/ |"])
+          t = open("README.md").read()
+          t = re.sub(r"(<!-- STATS:START -->).*?(<!-- STATS:END -->)",
+                     lambda m: f"{m.group(1)}\n{block}\n{m.group(2)}", t, flags=re.S)
+          open("README.md", "w").write(t)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --quiet || { git commit -m "Update stats" && git pull --rebase -q && git push; } \
+            || echo "::warning::Could not push README (branch protection?)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: stats
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
