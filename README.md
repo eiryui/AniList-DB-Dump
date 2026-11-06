@@ -18,6 +18,8 @@ Weekly SQL dump of the Anilist database, published as GitHub Releases.
 | Landing page | https://eiryui.github.io/AniList-DB-Dump/ |
 <!-- STATS:END -->
 
-Setup: [SETUP.md](SETUP.md)
+Using the dumps: [SETUP.md](SETUP.md) covers picking a file, deploying it to PostgreSQL, SQLite or DuckDB, and serving it as a JSON API with [AniServe](https://github.com/eiryui/AniServe).
+
+Maintainers: [.github/ADMIN.md](.github/ADMIN.md) (workflow and AniList-Indexer setup, owners only).
 
 License: [WTFPL](LICENSE)

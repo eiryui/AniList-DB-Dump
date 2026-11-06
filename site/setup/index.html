@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Setup - AniList-DB-Dump</title>
-<meta name="description" content="How to use the AniList-DB-Dump SQL dumps, or run your own copy.">
+<meta name="description" content="How to deploy the AniList-DB-Dump files to PostgreSQL, SQLite or DuckDB, and serve them as a JSON API with AniServe.">
 <meta name="theme-color" content="#07091a">
 <link rel="icon" href="../favicon.ico" sizes="48x48">
 <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
@@ -140,11 +140,11 @@ hr{border:0;border-top:1px solid var(--line);margin:2em 0}
 <section class="hero">
   <span class="kicker">Documentation</span>
   <h1>Setup guide</h1>
-  <p class="lead" id="lead">Weekly and manual <code>pg_dump</code> snapshots of AniList data, published as GitHub Releases.</p>
+  <p class="lead" id="lead">Load the AniList dump into the database you use, and optionally serve it as a JSON API with AniServe.</p>
   <div class="cta">
     <a href="https://github.com/eiryui/AniList-DB-Dump/releases/latest" target="_blank" rel="noopener">Latest release &rarr;</a>
-    <a class="ghost" href="#using-the-dumps">Use the dumps</a>
-    <a class="ghost" href="#run-your-own">Run your own</a>
+    <a class="ghost" href="#deploy-it">Deploy it</a>
+    <a class="ghost" href="#serve-it-as-a-json-api">AniServe API</a>
     <a class="ghost" href="#troubleshooting">Troubleshooting</a>
   </div>
 </section>

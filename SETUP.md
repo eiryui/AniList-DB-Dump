@@ -1,17 +1,20 @@
 # AniList-DB-Dump
 
-Weekly and manual `pg_dump` snapshots of a Supabase Postgres database holding AniList data, published as GitHub Releases, plus a status page.
+Weekly and manual snapshots of AniList data, published as GitHub Releases. Download one, load it into the database you already use, and optionally serve it as a JSON API with AniServe.
 
-Two audiences:
+## Quick start
 
-- **Just want the data?** Read [Using the dumps](#using-the-dumps).
-- **Running your own copy?** Read [Run your own](#run-your-own).
+| I want to... | Do this |
+|---|---|
+| Look at the data in a spreadsheet, pandas or a script | Download a [CSV, JSON, Parquet or SQLite file](#pick-a-file) |
+| Run it in a database | [Deploy it](#deploy-it) to PostgreSQL, SQLite or DuckDB |
+| Get a JSON API with a web UI on top | [Serve it with AniServe](#serve-it-as-a-json-api) |
 
-## Using the dumps
+Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, manual ones `manual-YYYY-MM-DD-HHMM`. The newest release is at the top, and its notes show when it was made and when the next scheduled dump is due. To look at the structure first, `sample/sample.sql` in the repo has the table definition and the 20 most popular rows.
 
-Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, manual ones `manual-YYYY-MM-DD-HHMM`. The newest release is at the top, and its notes show when it was made and when the next scheduled dump is due.
+## Pick a file
 
-### Which file?
+Every release has the same data in many formats. Pick by what you will load it into.
 
 | File | Use it when |
 |---|---|
@@ -21,17 +24,43 @@ Open the repo's **Releases** page. Weekly dumps are tagged `weekly-YYYY-MM-DD`, 
 | `*.sql.zst` | Same plain SQL again, zstd-compressed. Smallest SQL download. Needs `zstd` (`zstd -dc FILE.sql.zst \| psql anilist`) |
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
-| `*-csv.zip` | You want spreadsheets, pandas, or any tool that reads CSV. One `schema.table.csv` per table with a header row. Data only. Nested JSON columns are quoted JSON strings |
-| `*-tsv.zip` | Same as the CSV zip but tab separated. One `schema.table.tsv` per table. Data only |
-| `*-parquet.zip` | You analyse the data in pandas, DuckDB, Spark or similar. One `schema.table.parquet` per table, with real column types (ints, dates, arrays). JSON columns are stored as JSON text. Data only |
-| `*.sqlite` | You want one file you can open directly (DB Browser for SQLite, Python `sqlite3`). One table per table. Arrays and JSON are stored as JSON text, dates as ISO text. Data only |
+| `*.sqlite` | You want one file you can open directly (DB Browser for SQLite, Python `sqlite3`). Arrays and JSON are stored as JSON text, dates as ISO text. Data only |
 | `*.duckdb` | Same idea as SQLite, for analytics. Open with the DuckDB CLI or Python. Keeps real types. Data only |
-| `*-json.zip` | You want JSON for scripts or apps. One `schema.table.jsonl` per table, one JSON object per line (JSON Lines), with nested fields kept as real JSON. Data only |
-| `MANIFEST-<tag>.json` | You want to check a file is complete. Lists the row count of every table in Postgres and in each file, taken from the same run, plus an overall `all_match` flag |
-| `SHA256SUMS-<tag>.txt` | You want to verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
-| `sample/sample.sql` (in the repo) | You want to look at the structure and the 20 most popular rows before downloading anything big |
+| `*-parquet.zip` | You analyse the data in pandas, DuckDB, Spark or similar. One `schema.table.parquet` per table, with real column types. JSON columns are stored as JSON text. Data only |
+| `*-csv.zip` | Spreadsheets, pandas, or any tool that reads CSV. One `schema.table.csv` per table with a header row. Data only. Nested JSON columns are quoted JSON strings |
+| `*-tsv.zip` | Same as the CSV zip but tab separated |
+| `*-json.zip` | JSON for scripts or apps. One `schema.table.jsonl` per table, one JSON object per line (JSON Lines), nested fields kept as real JSON. Data only |
+| `MANIFEST-<tag>.json` | Check a file is complete. Row counts of every table in Postgres and in each file, from the same run, plus an overall `all_match` flag |
+| `SHA256SUMS-<tag>.txt` | Verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
 
-### Restore
+Files ending in `.gpg` are encrypted. Only the repo owner has the passphrase, so ask them. Decrypt with `gpg --decrypt FILE.gpg > FILE`.
+
+## Deploy it
+
+Pick the row that matches where you want the data to live. Each links to the recipe below.
+
+| Where | Release file | Connection string for AniServe |
+|---|---|---|
+| [Local PostgreSQL or Docker](#postgresql-local-or-docker) | `.dump` (or `.sql.gz`) | `postgresql://user:pass@localhost:5432/anilist` |
+| [Hosted PostgreSQL](#hosted-postgresql) (Supabase, Neon, Railway, Render, ...) | `.dump` (or `.sql.gz`) | the service's string plus `?sslmode=require` |
+| [SQLite](#sqlite-no-server) | `.sqlite` | `sqlite:///data/anilist.sqlite` |
+| [DuckDB](#duckdb-and-parquet) | `.duckdb` | `duckdb:///data/anilist.duckdb` |
+| [Parquet](#duckdb-and-parquet) (files or object storage) | `-parquet.zip`, unzipped | `parquet:///data/parquet` |
+| [CSV, TSV, JSON](#csv-tsv-and-json) | the matching zip | convert to SQLite or DuckDB first |
+
+The default schema is `public`, so the tables land in `public`. The dump has four tables: `anilist_catalog` (the anime, and the only one you strictly need), `anilist_detail_pages`, `anilist_index_state` and `anilist_missing_ids`.
+
+### Download and verify
+
+```bash
+TAG=<release tag>      # for example the newest one on the Releases page
+gh release download "$TAG" -R eiryui/AniList-DB-Dump -p '*.sqlite' -p 'SHA256SUMS*' -p 'MANIFEST*'
+sha256sum -c --ignore-missing SHA256SUMS-$TAG.txt
+```
+
+Swap `'*.sqlite'` for the pattern of the file you want (`'*.dump'`, `'*-parquet.zip'`, ...). Without the GitHub CLI, download from the Releases page in the browser.
+
+### PostgreSQL, local or Docker
 
 Use PostgreSQL 17 client tools or newer. Older `pg_restore` versions can refuse a newer archive.
 
@@ -40,12 +69,12 @@ createdb anilist
 pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
 
 # or plain SQL
-gunzip -c anilist-db-dump-<tag>.sql.gz | psql anilist
+gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
 # or the zip version
-unzip -p anilist-db-dump-<tag>.sql.zip | psql anilist
+unzip -p anilist-db-dump-<tag>.sql.zip | psql -v ON_ERROR_STOP=1 -d anilist
 ```
 
-No local Postgres? Use Docker:
+No local Postgres? Run it in Docker:
 
 ```bash
 docker run -d --name anilist -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17
@@ -53,136 +82,116 @@ docker exec -i anilist createdb -U postgres anilist
 pg_restore --no-owner --no-privileges -d "postgresql://postgres:pw@localhost:5432/anilist" anilist-db-dump-<tag>.dump
 ```
 
-Notes:
+Restore into an empty database. The dump comes from Supabase, so it can contain grants to Supabase roles (`anon`, `authenticated`, `service_role`). `--no-privileges` avoids the "role does not exist" errors in `pg_restore`; with `psql` they are harmless.
 
-- The default schema is `public`, so the tables land in `public`. Restore into an empty database.
-- The dump comes from Supabase, so it can contain grants to Supabase roles (`anon`, `authenticated`, `service_role`). On a normal Postgres server `psql` prints harmless "role does not exist" errors. `--no-privileges` avoids them for `pg_restore`.
-- Files ending in `.gpg` are encrypted. Only the repo owner has the passphrase, so ask them. Decrypt with `gpg --decrypt FILE.gpg > FILE`.
+### Hosted PostgreSQL
 
-### Something not working?
+The same two steps work on any service that gives you a normal PostgreSQL connection string (Supabase, Neon, Railway, Render and similar):
 
-See [Troubleshooting](#troubleshooting).
+1. Create an empty database in the service's dashboard and copy its connection string.
+2. Restore into it from your own machine:
 
-## Run your own
-
-You need a Supabase project and a GitHub repo (a personal repo or an organization both work). A public repo is the normal setup for public AniList data. See [Private data](#private-data) if yours is not.
-
-### 1. Secret
-
-Add `DATABASE_URL` as an Actions secret. Use the **Session pooler** string from Supabase (Connect), port 5432:
-
-```
-postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```bash
+pg_restore --no-owner --no-privileges -d "postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require" anilist-db-dump-<tag>.dump
 ```
 
-The direct connection is IPv6 only and GitHub runners cannot reach it. The transaction pooler (6543) does not work with pg_dump.
+Things that differ between services:
 
-### 2. Pages
+- **Use a direct or session connection for the restore.** Transaction poolers (for example Supabase's port 6543, or Neon's `-pooler` host) are not meant for `pg_restore`.
+- **IPv6.** Some services only offer IPv6 on the direct connection. If your network is IPv4 only, use the service's session pooler string instead.
+- **Size limits.** Check your plan's storage limit against the size of the `.dump` in the release before you restore.
+- **Read-only access for the API.** Create a login that can only `SELECT` (SQL below) and give AniServe that one.
 
-Settings > Pages > Source: **GitHub Actions**. Then run **AniList-DB-Dump - Status and site** once from the Actions tab. The site is at `https://<owner>.github.io/<repo>/` and this file is rendered at `/setup/`.
+```sql
+CREATE ROLE aniserve LOGIN PASSWORD 'change-me';
+GRANT CONNECT ON DATABASE anilist TO aniserve;
+GRANT USAGE ON SCHEMA public TO aniserve;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO aniserve;
+```
 
-### 3. First dump
+These hosted-service steps rely on standard PostgreSQL behaviour. AniServe's own guide marks every hosted service as untested, so if one needs a tweak, please open an issue.
 
-Run **AniList-DB-Dump - Manual**. After that the Saturday schedule takes over and does not depend on the manual runs.
+### SQLite, no server
 
-The workflows default to the table `public.anilist_catalog` with an `id` column, so no setup is needed if that is yours. If your table is named differently, set `STATS_TABLE` and `STATS_ID_COLUMN` (below) before running the status and sample workflows.
+The simplest option. One file, no database server.
 
-### Configuration
+```bash
+mkdir -p data && mv anilist-db-dump-*.sqlite data/anilist.sqlite
+sqlite3 data/anilist.sqlite "select count(*) from anilist_catalog;"
+```
 
-Secrets:
+### DuckDB and Parquet
 
-| Name | Required | What |
-|---|---|---|
-| `DATABASE_URL` | yes | Session pooler connection string |
-| `DUMP_ENCRYPTION_PASSPHRASE` | no | Encrypts every dump file with gpg AES256 (adds `.gpg`). Skip it for public data |
-| `SOURCE_DB_URL` | no | Copy workflow only. Falls back to `DATABASE_URL` |
-| `TARGET_DB_URL` | no | Copy workflow only. The database to write into |
+```bash
+# DuckDB: use the file as is
+duckdb data/anilist.duckdb "select count(*) from anilist_catalog;"
 
-Variables:
+# Parquet: unzip, then query the files directly (or keep them on object storage)
+unzip anilist-db-dump-*-parquet.zip -d data/parquet
+duckdb -c "select count(*) from 'data/parquet/public.anilist_catalog.parquet';"
+```
 
-| Name | Default | What |
-|---|---|---|
-| `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
-| `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
-| `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
-| `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. If the variable is unset and `public.anilist_catalog` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
-| `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
-| `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
-| `SAMPLE_ORDER_COLUMN` | `popularity` | Column the sample is sorted by, highest first. If the column does not exist the sample falls back to the lowest IDs |
+### CSV, TSV and JSON
 
-### Workflows
+These have no schema or indexes. For a quick look, open them in a spreadsheet or load them with pandas. To query them, convert them to SQLite or DuckDB with AniServe's `load_dump.py`:
 
-| Workflow | Trigger | Does |
-|---|---|---|
-| Weekly | cron, Saturday 00:00 UTC | Dump, then release `weekly-YYYY-MM-DD` |
-| Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule |
-| `_dump.yml` | called by the two above | The shared logic. Dumps in five formats plus CSV, TSV, JSON, Parquet, SQLite and DuckDB exports, optionally encrypts, writes notes, creates the release, prunes |
-| Status and site | every 6 h, after any dump, on push to `site/` or `SETUP.md` | Checks the database, writes `stats.json`, updates the README block, deploys Pages |
-| Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the 20 most popular rows, with the IDs listed in a header comment |
-| Copy database | button | Copies live source or a release into `TARGET_DB_URL`. Optional |
+```bash
+python load_dump.py anilist-db-dump-<tag>-csv.zip --to sqlite --out data/anilist.sqlite
+```
 
-Weekly and Manual share a concurrency group, so overlapping runs queue instead of colliding. Each release notes file lists the creation time and the next scheduled Saturday.
+It accepts the CSV, TSV and JSON zips, a folder, or single files, and adds indexes.
 
-Dump formats: one `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the `.sql.gz`, `.sql.zip`, `.sql.zst` and `-schema.sql` files converted from the `.dump` with `pg_restore`, so those five match exactly. The three plain SQL files are compressed from one and the same SQL file. The `.tar` is a second pg_dump a moment later. The CSV, TSV and JSON zips are exported table by table right after, so they can differ slightly from the `.dump` if the database changes while the workflow runs. The Parquet, SQLite and DuckDB files are written by `.github/scripts/export-formats.py` in one read-only transaction, so they match each other exactly. The workflow then counts the rows in every file and writes `MANIFEST-<tag>.json`. If the Parquet, SQLite or DuckDB counts differ from Postgres, the workflow fails and nothing is released. A difference in the `.dump`, CSV, TSV or JSON files only raises a warning and `all_match: false`, because those are taken a moment later and the database may have changed in between. All of these hold data only: no indexes or constraints. Parquet and DuckDB keep real column types; SQLite stores arrays and JSON as JSON text and dates as ISO text. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
+## Serve it as a JSON API
 
-### Status page
+[AniServe](https://github.com/eiryui/AniServe) is a small read-only JSON API with a browser UI for this dump. It never writes to the database and never calls AniList. It reads PostgreSQL, SQLite, DuckDB and Parquet, so anything in the [Deploy it](#deploy-it) table works.
 
-A browser cannot reach Postgres, so the Status workflow does the check and publishes `stats.json`: online or offline, row count and min and max ID of `STATS_TABLE`, database size, table count, latest release. The landing page cycles through these and reloads every minute. If the database is offline it shows the last known values, labelled as such. If `stats.json` is older than 13 hours it says the status is out of date.
+Quick start with SQLite:
 
-### Landing page covers
+```bash
+git clone https://github.com/eiryui/AniServe && cd AniServe
+pip install -r requirements.txt
+mkdir -p data && cp /path/to/anilist-db-dump-<tag>.sqlite data/anilist.sqlite
+cp .env.example .env            # DATABASE_URL already points at data/anilist.sqlite
+uvicorn app:app --port 8002
+```
 
-The two rows of covers (top row scrolling left to right, bottom row right to left) are read from `sample/sample.sql`, which the Status workflow publishes as `sample.sql` next to the page. The browser pulls the JSON out of each `INSERT` line and shows rank, cover, title, format, year and score. It looks for AniList-style fields (`title.english`, `coverImage.extraLarge`, `format`, `seasonYear`, `averageScore`) and also accepts flat snake_case columns. Until the first Sample dump has run, the page falls back to `site/showcase-seed.json`, a bundled copy of the 20 most popular anime.
+Then open:
 
-### Copy a database
+- `http://localhost:8002/` for the web UI
+- `http://localhost:8002/swagger` for the interactive API docs
+- `http://localhost:8002/health` to confirm it is connected to the database
 
-Set `TARGET_DB_URL` (and optionally `SOURCE_DB_URL`), then run **Copy database**. Inputs: `source` (`live` or `release`), `release_tag`, `wipe_target` (drops and recreates the dumped schemas first), and `confirm` (type `COPY`). It refuses to run when source and target match. psql errors are listed at the end; "already exists" noise on Supabase managed objects is normal.
+```bash
+curl "localhost:8002/search?query=frieren"
+curl "localhost:8002/trending?per_page=5"
+curl "localhost:8002/info/<anilist id>"
+```
 
-### Private data
+Already loaded the dump into PostgreSQL, DuckDB or Parquet? Set `DATABASE_URL` in `.env` to the matching string from the [Deploy it](#deploy-it) table and start it the same way. To run it as a container, the repo has a `Dockerfile`:
 
-The default assumes the database only holds public data. If it also holds anything private (users, emails, tokens, auth tables), keep the repo private, or set `DUMP_ENCRYPTION_PASSPHRASE`, and remember that `sample/sample.sql`, the README stats and the Pages site are public in a public repo. Pages on a private repo needs a paid GitHub plan and the site is still public.
+```bash
+docker build -t aniserve .
+docker run -p 8002:8002 -v "$PWD/data:/app/data:ro" -e DATABASE_URL=sqlite:///data/anilist.sqlite aniserve
+```
+
+The same image works on any host that runs Docker images or Python apps. Set `DATABASE_URL` and `PORT` there. For a public API, also read the rate limit and CORS settings in `.env.example`.
+
+**More:** the [AniServe repo](https://github.com/eiryui/AniServe) has the full endpoint list and configuration, and its [deployment guide](https://github.com/eiryui/AniServe/blob/main/docs/DEPLOY.md) covers each database, read-only roles and keeping the data fresh when a new release comes out.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Dump fails with "Network is unreachable" or a connection timeout | Direct (IPv6) connection string | Use the Session pooler string on port 5432 |
-| `server version mismatch` from pg_dump | The client on PATH is older than the server (the runner ships PostgreSQL 16) | The workflows already put `/usr/lib/postgresql/$PG_VERSION/bin` first. If your server is newer than 17, raise `PG_VERSION` |
-| 403 "Resource not accessible by integration" | Org or enterprise sets workflow permissions to read-only | The workflows request their own permissions, so first try re-running. If it persists, an org owner sets Org settings > Actions > General > Workflow permissions to read and write |
-| README or `sample/sample.sql` not updating, only a warning in the log | Branch protection or a ruleset blocks the bot push | Exempt `github-actions[bot]` or allow it to bypass |
-| Pages deploy fails | Pages source is not "GitHub Actions", or Pages is disabled for the org | Fix in Settings > Pages |
-| Landing page says "No stats.json found" | Status workflow has not run | Run it once |
-| Landing page says "status out of date" | Scheduled runs stopped | Check the Actions tab; see the 60-day note below |
-| Log warning: `Table public.anilist_catalog not found. Using <table> (the only table with the id and popularity columns). Set the STATS_TABLE variable to silence this.` | `public.anilist_catalog` does not exist in your database, so the workflow guessed your table | Add `STATS_TABLE` as a repository **Variable** (Settings > Secrets and variables > Actions > Variables tab, not Secrets) with your table name, then re-run **Status and site** and **Sample dump** |
-| `relation "public.anilist_catalog" does not exist` (Sample dump or Status log) | Your table has another name | Set `STATS_TABLE` to it. The log prints the tables it found. Use the exact case, for example `Anime` |
-| Status page shows "--" for anime counts | `STATS_TABLE` or `STATS_ID_COLUMN` is wrong | Set the variables to match your table |
-| Sample workflow fails with "No rows sampled" | Same, or the table is empty | Same fix |
-| `pg_restore` says the archive version is unsupported | Local client too old | Use PostgreSQL 17 tools or newer, or use the `.sql.gz` |
-| Restore prints "role ... does not exist" | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
-| Release upload fails on a large file | Over the 2 GB asset limit | Narrow `DUMP_SCHEMAS`, or drop the `.tar` (or one of the export steps) from `_dump.yml` |
-| Copy workflow says it is refusing | Source equals target, or `confirm` is not `COPY` | Fix the inputs |
+| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the `.sql.gz` instead |
+| Restore prints `role ... does not exist` | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
+| Restore fails on a hosted database through a pooler | Transaction poolers do not suit `pg_restore` | Use the direct or session connection string |
+| "Network is unreachable" or a timeout to a hosted database | Direct connection is IPv6 only and your network is IPv4 | Use the service's session pooler string |
+| AniServe `/health` says `degraded` | Its `problem` field says why: file not found, wrong URL scheme, missing table or missing driver | Fix `DATABASE_URL`, or install the driver it names |
+| SQLite path not found | Slashes in the URL | Three slashes for a relative path, four for an absolute one (`sqlite:////srv/anilist.sqlite`) |
+| `.gpg` file will not open | The file is encrypted | Ask the repo owner for the passphrase |
 
-## Gotchas
+## Running your own dump workflow
 
-- Scheduled runs can start several minutes late and run from the default branch only.
-- GitHub pauses scheduled workflows after 60 days without repo activity in public repos. A commit, or re-enabling the workflows in the Actions tab, fixes it.
-- A dump is not a full Supabase backup. Storage files, Edge Functions and project settings are not included, and auth users only if `auth` is in `DUMP_SCHEMAS`.
-- To change the Saturday schedule, edit the cron line in `weekly-dump.yml` and the next-Saturday logic in `_dump.yml` and `status.yml`.
-
-## Files
-
-```
-.github/workflows/
-  weekly-dump.yml     Saturday cron
-  manual-dump.yml     Manual button
-  _dump.yml           Shared dump and release logic
-  status.yml          Stats, README block, Pages deploy
-  sample-dump.yml     Commits sample/sample.sql
-  copy-database.yml   Optional copy to another database
-sample/sample.sql     Table definition and 20 rows (generated)
-site/index.html       Landing page
-site/showcase-seed.json  Fallback covers until sample.sql exists
-site/setup/index.html Renders this file with share buttons
-SETUP.md              This file
-```
+The weekly dumps are produced by GitHub Actions from a private indexer's database. Setting that up is a maintainer task and only the repository owners can do it. The owner guide is [`.github/ADMIN.md`](https://github.com/eiryui/AniList-DB-Dump/blob/main/.github/ADMIN.md). You do not need any of it to use the dumps.
 
 License: [WTFPL](http://www.wtfpl.net/)
