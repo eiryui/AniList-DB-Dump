@@ -2,7 +2,7 @@
 """Export the dumped schemas to Parquet, SQLite and DuckDB.
 
 Needs: psycopg[binary], pyarrow, duckdb.
-Env:   SUPABASE_DB_URL, DUMP_SCHEMAS (comma separated, default "public"), BASENAME.
+Env:   DATABASE_URL, DUMP_SCHEMAS (comma separated, default "public"), BASENAME.
 Writes: <BASENAME>.sqlite, <BASENAME>.duckdb, <BASENAME>-parquet.zip, pg-counts.json
 
 All tables are read in ONE repeatable-read, read-only transaction, so every file
@@ -110,7 +110,7 @@ def sqlite_type(t):
 
 
 def main():
-    url = os.environ["SUPABASE_DB_URL"]
+    url = os.environ["DATABASE_URL"]
     schemas = [s.strip() for s in os.environ.get("DUMP_SCHEMAS", "public").split(",") if s.strip()]
     base = os.environ["BASENAME"]
     for s in schemas:

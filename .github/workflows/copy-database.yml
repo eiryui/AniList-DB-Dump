@@ -44,7 +44,7 @@ jobs:
       CONFIRM: ${{ inputs.confirm }}
       PG_VERSION: ${{ vars.PG_VERSION || '17' }}
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
-      SOURCE_DB_URL: ${{ secrets.SOURCE_DB_URL || secrets.SUPABASE_DB_URL }}
+      SOURCE_DB_URL: ${{ secrets.SOURCE_DB_URL || secrets.DATABASE_URL }}
       TARGET_DB_URL: ${{ secrets.TARGET_DB_URL }}
       DUMP_ENCRYPTION_PASSPHRASE: ${{ secrets.DUMP_ENCRYPTION_PASSPHRASE }}
 
@@ -58,7 +58,7 @@ jobs:
             echo "Give a release_tag when source = release." >&2; exit 1
           fi
           if [ "$SOURCE" = "live" ] && [ -z "$SOURCE_DB_URL" ]; then
-            echo "Set SOURCE_DB_URL (or SUPABASE_DB_URL)." >&2; exit 1
+            echo "Set SOURCE_DB_URL (or DATABASE_URL)." >&2; exit 1
           fi
           if [ "$SOURCE_DB_URL" = "$TARGET_DB_URL" ]; then
             echo "Source and target are the same database. Refusing." >&2; exit 1

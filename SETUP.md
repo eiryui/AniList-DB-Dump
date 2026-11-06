@@ -69,7 +69,7 @@ You need a Supabase project and a GitHub repo (a personal repo or an organizatio
 
 ### 1. Secret
 
-Add `SUPABASE_DB_URL` as an Actions secret. Use the **Session pooler** string from Supabase (Connect), port 5432:
+Add `DATABASE_URL` as an Actions secret. Use the **Session pooler** string from Supabase (Connect), port 5432:
 
 ```
 postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
@@ -93,9 +93,9 @@ Secrets:
 
 | Name | Required | What |
 |---|---|---|
-| `SUPABASE_DB_URL` | yes | Session pooler connection string |
+| `DATABASE_URL` | yes | Session pooler connection string |
 | `DUMP_ENCRYPTION_PASSPHRASE` | no | Encrypts every dump file with gpg AES256 (adds `.gpg`). Skip it for public data |
-| `SOURCE_DB_URL` | no | Copy workflow only. Falls back to `SUPABASE_DB_URL` |
+| `SOURCE_DB_URL` | no | Copy workflow only. Falls back to `DATABASE_URL` |
 | `TARGET_DB_URL` | no | Copy workflow only. The database to write into |
 
 Variables:

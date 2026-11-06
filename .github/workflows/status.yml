@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       STATS_TABLE: ${{ vars.STATS_TABLE || 'public.anilist_catalog' }}
       STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
@@ -54,10 +54,10 @@ jobs:
           num(){ [[ "${1:-}" =~ ^[0-9]+$ ]] && echo "$1" || echo null; }
 
           online=false; row=""
-          if psql "$SUPABASE_DB_URL" -X -Atc 'select 1' >/dev/null 2>&1; then
+          if psql "$DATABASE_URL" -X -Atc 'select 1' >/dev/null 2>&1; then
             online=true
             RESOLVE_SOFT=1 source .github/scripts/resolve-table.sh
-            row=$(psql "$SUPABASE_DB_URL" -X -At -F '|' -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" 2>/dev/null <<'SQL'
+            row=$(psql "$DATABASE_URL" -X -At -F '|' -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" 2>/dev/null <<'SQL'
           select (select count(*) from :"schema".:"tbl"),
                  (select min(:"col") from :"schema".:"tbl"),
                  (select max(:"col") from :"schema".:"tbl"),

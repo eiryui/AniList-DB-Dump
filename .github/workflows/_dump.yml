@@ -8,7 +8,7 @@ on:
         required: true
         type: string
     secrets:
-      SUPABASE_DB_URL:
+      DATABASE_URL:
         required: true
       DUMP_ENCRYPTION_PASSPHRASE:
         required: false
@@ -28,7 +28,7 @@ jobs:
       PG_VERSION: ${{ vars.PG_VERSION || '17' }}
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
       KEEP_WEEKLY: ${{ vars.KEEP_WEEKLY || '0' }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DUMP_ENCRYPTION_PASSPHRASE: ${{ secrets.DUMP_ENCRYPTION_PASSPHRASE }}
 
     steps:
@@ -93,9 +93,9 @@ jobs:
           done
 
           # 1. custom format (.dump), the base for pg_restore
-          pg_dump "$SUPABASE_DB_URL" "${args[@]}" --format=custom --compress=9 --file="${BASENAME}.dump"
+          pg_dump "$DATABASE_URL" "${args[@]}" --format=custom --compress=9 --file="${BASENAME}.dump"
           # 2. tar format (.tar)
-          pg_dump "$SUPABASE_DB_URL" "${args[@]}" --format=tar --file="${BASENAME}.tar"
+          pg_dump "$DATABASE_URL" "${args[@]}" --format=tar --file="${BASENAME}.tar"
           # 3. plain SQL made once from the .dump, then compressed three ways: .sql.gz, .sql.zip, .sql.zst
           #    (one source file, so all three are byte-identical once decompressed)
           pg_restore --no-owner --file="${BASENAME}.sql" "${BASENAME}.dump"
@@ -114,7 +114,7 @@ jobs:
             echo "Dump looks empty ($size bytes), aborting." >&2
             exit 1
           fi
-          echo "SERVER_VERSION=$(psql "$SUPABASE_DB_URL" -Atc 'show server_version' 2>/dev/null || echo unknown)" >> "$GITHUB_ENV"
+          echo "SERVER_VERSION=$(psql "$DATABASE_URL" -Atc 'show server_version' 2>/dev/null || echo unknown)" >> "$GITHUB_ENV"
 
       - name: Export CSV, TSV and JSON (data only)
         run: |
@@ -126,7 +126,7 @@ jobs:
             s=$(echo "$s" | xargs)
             [ -n "$s" ] || continue
             [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "::error::Invalid schema name: $s"; exit 1; }
-            mapfile -t tables < <(psql "$SUPABASE_DB_URL" -X -Atq \
+            mapfile -t tables < <(psql "$DATABASE_URL" -X -Atq \
               -c "select table_name from information_schema.tables where table_schema = '${s}' and table_type = 'BASE TABLE' order by 1")
             for t in "${tables[@]}"; do
               [ -n "$t" ] || continue
@@ -135,13 +135,13 @@ jobs:
                 continue
               fi
               # CSV with a header row. Nested JSON columns become quoted JSON strings.
-              psql "$SUPABASE_DB_URL" -X -q \
+              psql "$DATABASE_URL" -X -q \
                 -c "\\copy (select * from \"${s}\".\"${t}\") to 'csv/${s}.${t}.csv' with (format csv, header true)"
               # TSV with a header row (CSV quoting rules, tab delimiter).
-              psql "$SUPABASE_DB_URL" -X -q \
+              psql "$DATABASE_URL" -X -q \
                 -c "\\copy (select * from \"${s}\".\"${t}\") to 'tsv/${s}.${t}.tsv' with (format csv, delimiter E'\\t', header true)"
               # JSON Lines: one JSON object per row. Plain psql output (not \copy) so backslashes are not doubled.
-              psql "$SUPABASE_DB_URL" -X -Atq \
+              psql "$DATABASE_URL" -X -Atq \
                 -c "select row_to_json(x) from \"${s}\".\"${t}\" x" > "json/${s}.${t}.jsonl"
               count=$((count + 1))
             done

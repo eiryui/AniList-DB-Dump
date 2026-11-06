@@ -1,4 +1,4 @@
-# Sourced by the Status and Sample dump workflows. Needs SUPABASE_DB_URL, STATS_TABLE, STATS_ID_COLUMN.
+# Sourced by the Status and Sample dump workflows. Needs DATABASE_URL, STATS_TABLE, STATS_ID_COLUMN.
 # Optional: STATS_TABLE_VAR (the raw repo variable, empty when unset), SAMPLE_ORDER_COLUMN,
 #           RESOLVE_SOFT=1 (warn instead of exiting when no table is found).
 # Sets: id (identifier regex), schema, tbl, STATS_TABLE.
@@ -10,18 +10,18 @@ schema=public; tbl=$STATS_TABLE
 [[ "$STATS_TABLE" == *.* ]] && { schema=${STATS_TABLE%%.*}; tbl=${STATS_TABLE#*.}; }
 
 if [ -z "${RESOLVE_SOFT:-}" ]; then
-  psql "$SUPABASE_DB_URL" -X -Atqc 'select 1' >/dev/null \
-    || { echo "::error::Cannot connect to the database. Check SUPABASE_DB_URL (Session pooler string)."; exit 1; }
+  psql "$DATABASE_URL" -X -Atqc 'select 1' >/dev/null \
+    || { echo "::error::Cannot connect to the database. Check DATABASE_URL (Session pooler string)."; exit 1; }
 fi
 
-found=$(psql "$SUPABASE_DB_URL" -X -Atq -v s="$schema" -v t="$tbl" <<'SQL'
+found=$(psql "$DATABASE_URL" -X -Atq -v s="$schema" -v t="$tbl" <<'SQL'
 select 1 from information_schema.tables
 where table_schema = :'s' and table_name = :'t' and table_type = 'BASE TABLE';
 SQL
 ) || found=""
 
 if [ -z "$found" ]; then
-  list=$(psql "$SUPABASE_DB_URL" -X -At -F '|' -v col="$STATS_ID_COLUMN" -v ocol="${SAMPLE_ORDER_COLUMN:-popularity}" <<'SQL'
+  list=$(psql "$DATABASE_URL" -X -At -F '|' -v col="$STATS_ID_COLUMN" -v ocol="${SAMPLE_ORDER_COLUMN:-popularity}" <<'SQL'
 select c.table_schema || '.' || c.table_name,
        (bool_or(c.column_name = :'col') and bool_or(c.column_name = :'ocol'))::text
 from information_schema.columns c

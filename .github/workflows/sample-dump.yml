@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       STATS_TABLE: ${{ vars.STATS_TABLE || 'public.anilist_catalog' }}
       STATS_TABLE_VAR: ${{ vars.STATS_TABLE }}
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
@@ -58,7 +58,7 @@ jobs:
           vars=(-v ON_ERROR_STOP=1 -v schema="$schema" -v tbl="$tbl" -v col="$STATS_ID_COLUMN" -v ocol="$SAMPLE_ORDER_COLUMN" -v n="$SAMPLE_SIZE")
 
           # Most popular first if the order column exists, otherwise lowest IDs.
-          has=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+          has=$(psql "$DATABASE_URL" -X -Atq "${vars[@]}" <<'SQL'
           select 1 from information_schema.columns
           where table_schema = :'schema' and table_name = :'tbl' and column_name = :'ocol';
           SQL
@@ -72,7 +72,7 @@ jobs:
           fi
           vars+=(-v ord="$ord")
 
-          ids=$(psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+          ids=$(psql "$DATABASE_URL" -X -Atq "${vars[@]}" <<'SQL'
           with r as (
             select :"col" as id, row_number() over (order by :ord) as rn
             from :"schema".:"tbl" order by :ord limit :n)
@@ -88,9 +88,9 @@ jobs:
             echo "-- ids:       ${ids}"
             echo "-- generated: $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo
-            pg_dump "$SUPABASE_DB_URL" --schema-only --no-owner --no-privileges --table="\"${schema}\".\"${tbl}\""
+            pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges --table="\"${schema}\".\"${tbl}\""
             echo
-            psql "$SUPABASE_DB_URL" -X -Atq "${vars[@]}" <<'SQL'
+            psql "$DATABASE_URL" -X -Atq "${vars[@]}" <<'SQL'
           select format('INSERT INTO %I.%I SELECT * FROM jsonb_populate_record(NULL::%I.%I, %L);',
                         :'schema', :'tbl', :'schema', :'tbl', to_jsonb(t))
           from (select * from :"schema".:"tbl" order by :ord limit :n) t;
