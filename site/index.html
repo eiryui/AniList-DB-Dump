@@ -86,7 +86,7 @@ h1{margin:22px 0 -.12em;font-size:clamp(2.4rem,8vw,5.4rem);line-height:1.15;padd
 
 /* formats */
 .formats{max-width:1100px;margin:clamp(40px,6vw,72px) auto 0}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:0 var(--pad)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:0 var(--pad)}
 .fmt{padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--panel);transition:border-color .25s,transform .25s}
 .fmt:hover{border-color:#3db4f255;transform:translateY(-2px)}
 .fmt code{display:inline-block;padding:2px 9px;border-radius:8px;background:#3db4f21f;color:var(--blue);font:600 .85rem ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -140,7 +140,8 @@ footer a{color:var(--blue)}
 <section class="formats">
   <h2>Every release includes</h2>
   <div class="grid">
-    <div class="fmt"><code>.dump</code> <code>.sql</code><p>PostgreSQL. Custom format for <b>pg_restore</b>, or plain SQL for <b>psql</b>.</p></div>
+    <div class="fmt"><code>.dump</code><p>PostgreSQL. pg_dump custom format, restore with <b>pg_restore</b>.</p></div>
+    <div class="fmt"><code>.sql</code><p>PostgreSQL. Plain SQL, load it with <b>psql</b>.</p></div>
     <div class="fmt"><code>.sqlite</code><p>SQLite. One file, open it with any SQLite tool.</p></div>
     <div class="fmt"><code>.duckdb</code><p>DuckDB. One typed file, for analytics.</p></div>
   </div>
