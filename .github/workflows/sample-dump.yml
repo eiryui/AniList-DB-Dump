@@ -1,0 +1,88 @@
+name: AniList-DB-Dump - Sample dump
+
+# Commits sample/sample.sql: the table definition plus the 20 most popular rows
+# of public.anilist_catalog (highest popularity first) as plain SQL, with the
+# IDs listed in the header. The landing page reads this file for its cover rows.
+# Runs after the weekly update, after a manual dump, and from its own button.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["AniList-DB-Dump - Weekly", "AniList-DB-Dump - Manual"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sample-dump
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}
+      # pg_dump client version. Must be equal to or newer than the server.
+      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
+
+      - name: Build sample/sample.sql
+        run: |
+          set -euo pipefail
+          export PGCONNECT_TIMEOUT=15
+          [[ "$SAMPLE_SIZE" =~ ^[0-9]+$ ]] || { echo "::error::SAMPLE_SIZE must be a number"; exit 1; }
+          psql "$DATABASE_URL" -X -Atqc 'select 1' >/dev/null \
+            || { echo "::error::Cannot connect to the database. Check DATABASE_URL (Session pooler string)."; exit 1; }
+
+          ids=$(psql "$DATABASE_URL" -X -Atq -v ON_ERROR_STOP=1 -v n="$SAMPLE_SIZE" <<'SQL'
+          with r as (
+            select id, row_number() over (order by popularity desc nulls last, id) as rn
+            from public.anilist_catalog
+            order by popularity desc nulls last, id
+            limit :n)
+          select string_agg(id::text, ', ' order by rn) from r;
+          SQL
+          )
+
+          mkdir -p sample
+          {
+            echo "-- AniList-DB-Dump sample"
+            echo "-- table:     public.anilist_catalog"
+            echo "-- rows:      ${SAMPLE_SIZE} (most popular first, by popularity)"
+            echo "-- ids:       ${ids}"
+            echo "-- generated: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges --table=public.anilist_catalog
+            echo
+            psql "$DATABASE_URL" -X -Atq -v ON_ERROR_STOP=1 -v n="$SAMPLE_SIZE" <<'SQL'
+          select format('INSERT INTO public.anilist_catalog SELECT * FROM jsonb_populate_record(NULL::public.anilist_catalog, %L);',
+                        to_jsonb(t))
+          from (select * from public.anilist_catalog order by popularity desc nulls last, id limit :n) t;
+          SQL
+          } > sample/sample.sql
+          [ "$(grep -c '^INSERT INTO' sample/sample.sql)" -gt 0 ] || { echo "No rows sampled." >&2; exit 1; }
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sample/sample.sql
+          git diff --cached --quiet || { git commit -m "Update sample dump" && git pull --rebase -q && git push; }
