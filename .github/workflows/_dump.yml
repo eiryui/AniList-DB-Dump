@@ -76,7 +76,7 @@ jobs:
           echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
           "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
 
-      - name: Dump database (custom, tar, plain SQL, schema only; nothing compressed)
+      - name: Dump database (custom, tar, plain SQL, SQL gzip, schema only)
         run: |
           set -euo pipefail
           args=(--no-owner)
@@ -90,8 +90,9 @@ jobs:
           pg_dump "$DATABASE_URL" "${args[@]}" --format=custom --compress=0 --file="${BASENAME}.dump"
           # 2. tar format (.tar)
           pg_dump "$DATABASE_URL" "${args[@]}" --format=tar --file="${BASENAME}.tar"
-          # 3. plain SQL made once from the .dump, published as is (uncompressed)
+          # 3. plain SQL made once from the .dump, published as is (uncompressed), plus a gzipped copy (.sql.gz)
           pg_restore --no-owner --file="${BASENAME}.sql" "${BASENAME}.dump"
+          gzip -9 -c "${BASENAME}.sql" > "${BASENAME}.sql.gz"
           # Rows per table inside the dump (one line per row in COPY blocks), for MANIFEST.json
           awk '/^COPY /{t=$2; n=0; inb=1; next} inb && /^\\\.$/{gsub(/"/,"",t); print t "\t" n; inb=0; next} inb{n++}' \
             "${BASENAME}.sql" > dump-counts.tsv
@@ -155,8 +156,8 @@ jobs:
       - name: List files and checksum
         run: |
           set -euo pipefail
-          # Everything is released as plain, uncompressed files. No archives, no encryption.
-          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql" "${BASENAME}-schema.sql" "${BASENAME}.sqlite" "${BASENAME}.duckdb")
+          # Everything is released as plain, uncompressed files, except the SQL which also comes as .sql.gz. No zip archives, no encryption.
+          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql" "${BASENAME}.sql.gz" "${BASENAME}-schema.sql" "${BASENAME}.sqlite" "${BASENAME}.duckdb")
           # One file per table: CSV, TSV, JSON Lines, JSON, Parquet
           for ext in csv tsv jsonl json parquet; do
             for f in "${BASENAME}".*."${ext}"; do
@@ -189,6 +190,7 @@ jobs:
               *-schema.sql)    echo "plain SQL, schema only" ;;
               *.dump)          echo "pg_dump custom format, uncompressed (pg_restore)" ;;
               *.tar)           echo "pg_dump tar format (pg_restore)" ;;
+              *.sql.gz)        echo "plain SQL, gzipped (psql)" ;;
               *.sql)           echo "plain SQL, uncompressed (psql)" ;;
               *.csv)           echo "CSV with header row (data only)" ;;
               *.tsv)           echo "TSV with header row (data only)" ;;
@@ -211,7 +213,7 @@ jobs:
             echo "| **Next scheduled update** | ${NEXT_WEEKLY} |"
             echo "| **Schemas** | ${DUMP_SCHEMAS} |"
             echo "| **Postgres server** | ${SERVER_VERSION} |"
-            echo "| **Compression** | none, every file is plain |"
+            echo "| **Compression** | none, except the SQL which is also provided as .sql.gz |"
             echo
             echo "### Files"
             echo
@@ -236,6 +238,7 @@ jobs:
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.tar
           # plain SQL
           psql "$TARGET_DB_URL" -f FILE.sql
+          gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"
           # CSV, TSV, JSON, JSON Lines, Parquet: one file per table, use them directly.
           # SQLite and DuckDB files open directly.
           ```

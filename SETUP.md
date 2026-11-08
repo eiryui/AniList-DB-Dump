@@ -20,6 +20,7 @@ Every release has the same data in many formats. Pick by what you will load it i
 |---|---|
 | `*.dump` | You have PostgreSQL and want the fastest, most flexible restore (`pg_restore`). Pick this by default. Supports restoring single tables |
 | `*.sql` | You want plain SQL for `psql` (`psql -d anilist -f FILE.sql`), or to read or process it with other tools |
+| `*.sql.gz` | The same SQL, gzipped. Smaller download. `gunzip -c FILE.sql.gz \| psql anilist` |
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
 | `*.sqlite` | You want one file you can open directly (DB Browser for SQLite, Python `sqlite3`). Arrays and JSON are stored as JSON text, dates as ISO text. Data only |
@@ -67,6 +68,8 @@ pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
 
 # or plain SQL
 psql -v ON_ERROR_STOP=1 -d anilist -f anilist-db-dump-<tag>.sql
+# or the gzipped copy
+gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
 ```
 
 No local Postgres? Run it in Docker:
