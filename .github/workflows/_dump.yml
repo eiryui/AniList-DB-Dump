@@ -1,0 +1,208 @@
+name: AniList-DB-Dump (reusable)
+
+# Dumps the public schema as PostgreSQL (.dump and .sql), SQLite and DuckDB,
+# checks the row counts, and publishes everything as a GitHub release.
+on:
+  workflow_call:
+    inputs:
+      kind:
+        description: "weekly or manual"
+        required: true
+        type: string
+    secrets:
+      DATABASE_URL:
+        required: true
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    concurrency:
+      group: supabase-dump
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIND: ${{ inputs.kind }}
+      # pg_dump client version. Must be equal to or newer than the server.
+      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
+      KEEP_WEEKLY: ${{ vars.KEEP_WEEKLY || '0' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - name: Check out the repo (for .github/scripts)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Compute tag and dates
+        run: |
+          set -euo pipefail
+          date_tag=$(date -u +%F)
+          time_tag=$(date -u +%H%M)
+          if [ "$KIND" = "manual" ]; then
+            tag="manual-${date_tag}-${time_tag}"
+            title="AniList-DB-Dump manual - ${date_tag} ${time_tag} UTC"
+          else
+            tag="weekly-${date_tag}"
+            title="AniList-DB-Dump weekly - ${date_tag}"
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tag="${tag}-$(date -u +%S)"
+          fi
+          dow=$(date -u +%u)
+          add=$(( (6 - dow + 7) % 7 ))
+          [ "$add" -eq 0 ] && add=7
+          next_date=$(date -u -d "+${add} days" +%F)
+          {
+            echo "TAG=$tag"
+            echo "TITLE=$title"
+            echo "CREATED=$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "NEXT_WEEKLY=Saturday ${next_date} 00:00 UTC"
+            echo "BASENAME=anilist-db-dump-${tag}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
+
+      - name: Dump PostgreSQL (.dump and .sql)
+        run: |
+          set -euo pipefail
+          # Custom format for pg_restore, no compression.
+          pg_dump "$DATABASE_URL" --schema=public --no-owner --format=custom --compress=0 \
+            --file="${BASENAME}.dump"
+
+          size=$(stat -c %s "${BASENAME}.dump")
+          if [ "$size" -lt 200 ]; then
+            echo "Dump looks empty ($size bytes), aborting." >&2
+            exit 1
+          fi
+
+          # Plain SQL made from the .dump, so it matches it exactly. Uncompressed.
+          pg_restore --no-owner --file="${BASENAME}.sql" "${BASENAME}.dump"
+
+          # Rows per table inside the dump (one line per row in a COPY block), for the MANIFEST
+          pg_restore --data-only --file=- "${BASENAME}.dump" \
+            | awk '/^COPY /{t=$2; n=0; inb=1; next} inb && /^\\\.$/{gsub(/"/,"",t); print t "\t" n; inb=0; next} inb{n++}' \
+            > dump-counts.tsv
+
+          echo "SERVER_VERSION=$(psql "$DATABASE_URL" -Atc 'show server_version' 2>/dev/null || echo unknown)" >> "$GITHUB_ENV"
+
+      - name: Export SQLite and DuckDB
+        run: |
+          set -euo pipefail
+          python3 -m venv .export-venv
+          .export-venv/bin/pip install --quiet "psycopg[binary]" pyarrow duckdb
+          .export-venv/bin/python .github/scripts/export-formats.py
+
+      - name: Build and check MANIFEST (row counts)
+        run: |
+          set -euo pipefail
+          .export-venv/bin/python .github/scripts/build-manifest.py
+
+      - name: List files and checksum
+        run: |
+          set -euo pipefail
+          # Plain, uncompressed files. No zip archives, no encryption.
+          files=("${BASENAME}.dump" "${BASENAME}.sql" "${BASENAME}.sqlite" "${BASENAME}.duckdb" "MANIFEST-${TAG}.json")
+          printf '%s\n' "${files[@]}" > assets.txt
+          sums="SHA256SUMS-${TAG}.txt"
+          xargs sha256sum < assets.txt > "$sums"
+          echo "$sums" >> assets.txt
+          for f in $(cat assets.txt); do
+            [ "$(stat -c %s "$f")" -lt 2147483648 ] || echo "::warning::$f is over the 2 GB release asset limit and will fail to upload"
+          done
+          echo "Release will have $(wc -l < assets.txt) file(s)."
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          if [ "$KIND" = "manual" ]; then kind_line="Manual dump (the Saturday schedule is not affected)"
+          else kind_line="Scheduled weekly dump"; fi
+          pages="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}"
+
+          describe() {
+            case "$1" in
+              *.dump)          echo "**PostgreSQL**: pg_dump custom format, restore with \`pg_restore\`" ;;
+              *.sql)           echo "**PostgreSQL**: plain SQL, load with \`psql\`" ;;
+              *.sqlite)        echo "**SQLite**: one database file, data only" ;;
+              *.duckdb)        echo "**DuckDB**: one database file with real types, data only" ;;
+              MANIFEST-*.json) echo "Row counts per table in every file" ;;
+              SHA256SUMS-*)    echo "Checksums, verify with \`sha256sum -c\`" ;;
+              *)               echo "" ;;
+            esac
+          }
+          {
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Type** | ${kind_line} |"
+            echo "| **Created** | ${CREATED} |"
+            echo "| **Next scheduled dump** | ${NEXT_WEEKLY} |"
+            echo "| **Tag** | \`${TAG}\` |"
+            echo "| **Postgres server** | ${SERVER_VERSION} |"
+            echo
+            echo "### Files"
+            echo
+            echo "| File | What it is | Size |"
+            echo "|---|---|---:|"
+            while read -r f; do
+              echo "| \`$f\` | $(describe "$f") | $(du -h "$f" | cut -f1) |"
+            done < assets.txt
+            echo
+            cat manifest-summary.md
+            echo
+          } > notes.md
+          cat >> notes.md <<NOTES
+          ### Use it
+
+          \`\`\`bash
+          # PostgreSQL (use PostgreSQL 18 client tools or newer)
+          pg_restore --no-owner --no-privileges -d "\$TARGET_DB_URL" ${BASENAME}.dump
+          # or plain SQL (an error "schema public already exists" is harmless, the data still loads)
+          psql "\$TARGET_DB_URL" -f ${BASENAME}.sql
+          # SQLite and DuckDB: open the file directly
+          sqlite3 ${BASENAME}.sqlite "select count(*) from anilist_catalog;"
+          duckdb ${BASENAME}.duckdb "select count(*) from public.anilist_catalog;"
+          # Check a download
+          sha256sum -c --ignore-missing SHA256SUMS-${TAG}.txt
+          \`\`\`
+
+          Full guide: ${pages}/setup/
+          NOTES
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+          latest="--latest=false"
+          [ "$KIND" = "weekly" ] && latest="--latest"
+          mapfile -t assets < assets.txt
+          gh release create "$TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TITLE" --notes-file notes.md "$latest"
+
+      - name: Prune old weekly releases (optional)
+        if: ${{ inputs.kind == 'weekly' }}
+        run: |
+          set -euo pipefail
+          [ "$KEEP_WEEKLY" -gt 0 ] || { echo "KEEP_WEEKLY not set, skipping."; exit 0; }
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,createdAt \
+            | jq -r --argjson keep "$KEEP_WEEKLY" \
+                '[.[] | select(.tagName | startswith("weekly-"))]
+                 | sort_by(.createdAt) | reverse | .[$keep:] | .[].tagName' \
+            | while read -r old; do
+                echo "Deleting $old"
+                gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+              done
