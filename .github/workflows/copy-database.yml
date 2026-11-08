@@ -42,7 +42,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag }}
       WIPE: ${{ inputs.wipe_target }}
       CONFIRM: ${{ inputs.confirm }}
-      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
+      PG_VERSION: ${{ vars.PG_VERSION || '17' }}
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
       SOURCE_DB_URL: ${{ secrets.SOURCE_DB_URL || secrets.DATABASE_URL }}
       TARGET_DB_URL: ${{ secrets.TARGET_DB_URL }}

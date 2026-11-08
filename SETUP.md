@@ -60,7 +60,7 @@ Swap `'*.sqlite'` for the pattern of the file you want (`'*.dump'`, `'*.parquet'
 
 ### PostgreSQL, local or Docker
 
-Use PostgreSQL 18 client tools or newer. Older `pg_restore` versions can refuse a newer archive.
+Use PostgreSQL 17 client tools or newer. Older `pg_restore` versions can refuse a newer archive.
 
 ```bash
 createdb anilist
@@ -75,7 +75,7 @@ gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
 No local Postgres? Run it in Docker:
 
 ```bash
-docker run -d --name anilist -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:18
+docker run -d --name anilist -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17
 docker exec -i anilist createdb -U postgres anilist
 pg_restore --no-owner --no-privileges -d "postgresql://postgres:pw@localhost:5432/anilist" anilist-db-dump-<tag>.dump
 ```
@@ -180,7 +180,7 @@ The same image works on any host that runs Docker images or Python apps. Set `DA
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 18 tools or newer, or restore the plain `.sql` instead |
+| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the plain `.sql` instead |
 | Restore prints `role ... does not exist` | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
 | Restore fails on a hosted database through a pooler | Transaction poolers do not suit `pg_restore` | Use the direct or session connection string |
 | "Network is unreachable" or a timeout to a hosted database | Direct connection is IPv6 only and your network is IPv4 | Use the service's session pooler string |
