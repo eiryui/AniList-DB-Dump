@@ -29,7 +29,7 @@ jobs:
       STATS_ID_COLUMN: ${{ vars.STATS_ID_COLUMN || 'id' }}
       SAMPLE_SIZE: ${{ vars.SAMPLE_SIZE || '20' }}
       SAMPLE_ORDER_COLUMN: ${{ vars.SAMPLE_ORDER_COLUMN || 'popularity' }}
-      PG_VERSION: ${{ vars.PG_VERSION || '17' }}
+      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
     steps:
       - uses: actions/checkout@v4
 
