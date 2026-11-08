@@ -142,14 +142,15 @@ footer a{color:var(--blue)}
   <div class="grid">
     <div class="fmt"><code>.dump</code><p>pg_dump custom format. Best for <b>pg_restore</b>.</p></div>
     <div class="fmt"><code>.tar</code><p>pg_dump tar format, a second copy a moment later.</p></div>
-    <div class="fmt"><code>.sql</code><p>Plain SQL, uncompressed. Works with <b>psql</b>. Some releases ship <b>.sql.gz</b>, <b>.sql.zip</b> and <b>.sql.zst</b> instead.</p></div>
+    <div class="fmt"><code>.sql</code><p>Plain SQL, uncompressed. Works with <b>psql</b>.</p></div>
     <div class="fmt"><code>-schema.sql</code><p>Tables and indexes only, no data.</p></div>
-    <div class="fmt"><code>-csv.zip</code><p>One CSV per table. Opens in spreadsheets and <b>pandas</b>.</p></div>
-    <div class="fmt"><code>-tsv.zip</code><p>One tab separated file per table.</p></div>
-    <div class="fmt"><code>-parquet.zip</code><p>One Parquet file per table. Typed, for <b>pandas</b>, <b>DuckDB</b>, Spark.</p></div>
+    <div class="fmt"><code>.csv</code><p>One CSV file per table. Opens in spreadsheets and <b>pandas</b>.</p></div>
+    <div class="fmt"><code>.tsv</code><p>One tab separated file per table.</p></div>
+    <div class="fmt"><code>.parquet</code><p>One Parquet file per table. Typed, for <b>pandas</b>, <b>DuckDB</b>, Spark.</p></div>
     <div class="fmt"><code>.sqlite</code><p>One SQLite file. Open it with any SQLite tool.</p></div>
     <div class="fmt"><code>.duckdb</code><p>One DuckDB file, typed, for analytics.</p></div>
-    <div class="fmt"><code>-json.zip</code><p>One JSON Lines file per table. Data only.</p></div>
+    <div class="fmt"><code>.json</code><p>One JSON file per table (an array of rows). Data only.</p></div>
+    <div class="fmt"><code>.jsonl</code><p>One JSON Lines file per table, one row per line.</p></div>
   </div>
 </section>
 </main>

@@ -19,22 +19,18 @@ Every release has the same data in many formats. Pick by what you will load it i
 | File | Use it when |
 |---|---|
 | `*.dump` | You have PostgreSQL and want the fastest, most flexible restore (`pg_restore`). Pick this by default. Supports restoring single tables |
-| `*.sql` | You want plain SQL for `psql` (`psql -d anilist -f FILE.sql`), or to read or process it with other tools. Uncompressed. This is what a release has by default |
-| `*.sql.gz` | Same plain SQL, gzipped. Only in releases made with **Compress release** on |
-| `*.sql.zip` | Same plain SQL as `.sql.gz`, as a zip. Easier to open on Windows and macOS without extra tools. Only in compressed releases |
-| `*.sql.zst` | Same plain SQL again, zstd-compressed. Smallest SQL download. Needs `zstd` (`zstd -dc FILE.sql.zst \| psql anilist`). Only in compressed releases |
+| `*.sql` | You want plain SQL for `psql` (`psql -d anilist -f FILE.sql`), or to read or process it with other tools |
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
 | `*.sqlite` | You want one file you can open directly (DB Browser for SQLite, Python `sqlite3`). Arrays and JSON are stored as JSON text, dates as ISO text. Data only |
 | `*.duckdb` | Same idea as SQLite, for analytics. Open with the DuckDB CLI or Python. Keeps real types. Data only |
-| `*-parquet.zip` | You analyse the data in pandas, DuckDB, Spark or similar. One `schema.table.parquet` per table, with real column types. JSON columns are stored as JSON text. Data only |
-| `*-csv.zip` | Spreadsheets, pandas, or any tool that reads CSV. One `schema.table.csv` per table with a header row. Data only. Nested JSON columns are quoted JSON strings |
-| `*-tsv.zip` | Same as the CSV zip but tab separated |
-| `*-json.zip` | JSON for scripts or apps. One `schema.table.jsonl` per table, one JSON object per line (JSON Lines), nested fields kept as real JSON. Data only |
+| `*.parquet` | You analyse the data in pandas, DuckDB, Spark or similar. One `<release>.schema.table.parquet` file per table, with real column types, uncompressed. JSON columns are stored as JSON text. Data only |
+| `*.csv` | Spreadsheets, pandas, or any tool that reads CSV. One `<release>.schema.table.csv` file per table with a header row. Data only. Nested JSON columns are quoted JSON strings |
+| `*.tsv` | Same as the CSV files but tab separated |
+| `*.json` | JSON for scripts or apps. One `<release>.schema.table.json` file per table: a JSON array of row objects, one object per line, nested fields kept as real JSON. Data only |
+| `*.jsonl` | The same rows as JSON Lines (one JSON object per line, no surrounding array). Easier to stream large tables. Data only |
 | `MANIFEST-<tag>.json` | Check a file is complete. Row counts of every table in Postgres and in each file, from the same run, plus an overall `all_match` flag |
 | `SHA256SUMS-<tag>.txt` | Verify a download: `sha256sum -c SHA256SUMS-<tag>.txt` |
-
-Files ending in `.gpg` are encrypted. Only the repo owner has the passphrase, so ask them. Decrypt with `gpg --decrypt FILE.gpg > FILE`.
 
 ## Deploy it
 
@@ -46,8 +42,8 @@ Pick the row that matches where you want the data to live. Each links to the rec
 | [Hosted PostgreSQL](#hosted-postgresql) (Supabase, Neon, Railway, Render, ...) | `.dump` (or `.sql`) | the service's string plus `?sslmode=require` |
 | [SQLite](#sqlite-no-server) | `.sqlite` | `sqlite:///data/anilist.sqlite` |
 | [DuckDB](#duckdb-and-parquet) | `.duckdb` | `duckdb:///data/anilist.duckdb` |
-| [Parquet](#duckdb-and-parquet) (files or object storage) | `-parquet.zip`, unzipped | `parquet:///data/parquet` |
-| [CSV, TSV, JSON](#csv-tsv-and-json) | the matching zip | convert to SQLite or DuckDB first |
+| [Parquet](#duckdb-and-parquet) (files or object storage) | `.parquet` files | `parquet:///data/parquet` |
+| [CSV, TSV, JSON](#csv-tsv-and-json) | the matching files | convert to SQLite or DuckDB first |
 
 The default schema is `public`, so the tables land in `public`. The dump has four tables: `anilist_catalog` (the anime, and the only one you strictly need), `anilist_detail_pages`, `anilist_index_state` and `anilist_missing_ids`.
 
@@ -59,7 +55,7 @@ gh release download "$TAG" -R eiryui/AniList-DB-Dump -p '*.sqlite' -p 'SHA256SUM
 sha256sum -c --ignore-missing SHA256SUMS-$TAG.txt
 ```
 
-Swap `'*.sqlite'` for the pattern of the file you want (`'*.dump'`, `'*-parquet.zip'`, ...). Without the GitHub CLI, download from the Releases page in the browser.
+Swap `'*.sqlite'` for the pattern of the file you want (`'*.dump'`, `'*.parquet'`, `'*.json'`, ...). Without the GitHub CLI, download from the Releases page in the browser.
 
 ### PostgreSQL, local or Docker
 
@@ -71,9 +67,6 @@ pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
 
 # or plain SQL
 psql -v ON_ERROR_STOP=1 -d anilist -f anilist-db-dump-<tag>.sql
-# or, if the release was made with Compress release on
-gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
-unzip -p anilist-db-dump-<tag>.sql.zip | psql -v ON_ERROR_STOP=1 -d anilist
 ```
 
 No local Postgres? Run it in Docker:
@@ -128,9 +121,9 @@ sqlite3 data/anilist.sqlite "select count(*) from anilist_catalog;"
 # DuckDB: use the file as is
 duckdb data/anilist.duckdb "select count(*) from anilist_catalog;"
 
-# Parquet: unzip, then query the files directly (or keep them on object storage)
-unzip anilist-db-dump-*-parquet.zip -d data/parquet
-duckdb -c "select count(*) from 'data/parquet/public.anilist_catalog.parquet';"
+# Parquet: query the files directly (or keep them on object storage)
+mkdir -p data/parquet && mv anilist-db-dump-*.parquet data/parquet/
+duckdb -c "select count(*) from 'data/parquet/*.public.anilist_catalog.parquet';"
 ```
 
 ### CSV, TSV and JSON
@@ -138,10 +131,10 @@ duckdb -c "select count(*) from 'data/parquet/public.anilist_catalog.parquet';"
 These have no schema or indexes. For a quick look, open them in a spreadsheet or load them with pandas. To query them, convert them to SQLite or DuckDB with AniServe's `load_dump.py`:
 
 ```bash
-python load_dump.py anilist-db-dump-<tag>-csv.zip --to sqlite --out data/anilist.sqlite
+python load_dump.py anilist-db-dump-<tag>.public.anilist_catalog.csv --to sqlite --out data/anilist.sqlite
 ```
 
-It accepts the CSV, TSV and JSON zips, a folder, or single files, and adds indexes.
+It accepts CSV, TSV and JSON files or a folder of them, and adds indexes.
 
 ## Serve it as a JSON API
 
@@ -184,13 +177,12 @@ The same image works on any host that runs Docker images or Python apps. Set `DA
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the plain `.sql` (or `.sql.gz`) instead |
+| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the plain `.sql` instead |
 | Restore prints `role ... does not exist` | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
 | Restore fails on a hosted database through a pooler | Transaction poolers do not suit `pg_restore` | Use the direct or session connection string |
 | "Network is unreachable" or a timeout to a hosted database | Direct connection is IPv6 only and your network is IPv4 | Use the service's session pooler string |
 | AniServe `/health` says `degraded` | Its `problem` field says why: file not found, wrong URL scheme, missing table or missing driver | Fix `DATABASE_URL`, or install the driver it names |
 | SQLite path not found | Slashes in the URL | Three slashes for a relative path, four for an absolute one (`sqlite:////srv/anilist.sqlite`) |
-| `.gpg` file will not open | The file is encrypted | Ask the repo owner for the passphrase |
 
 ## Running your own dump workflow
 

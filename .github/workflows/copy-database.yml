@@ -46,7 +46,6 @@ jobs:
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
       SOURCE_DB_URL: ${{ secrets.SOURCE_DB_URL || secrets.DATABASE_URL }}
       TARGET_DB_URL: ${{ secrets.TARGET_DB_URL }}
-      DUMP_ENCRYPTION_PASSPHRASE: ${{ secrets.DUMP_ENCRYPTION_PASSPHRASE }}
 
     steps:
       - name: Check inputs
@@ -104,24 +103,11 @@ jobs:
             done
             pg_dump "$SOURCE_DB_URL" "${args[@]}" > restore.sql
           else
-            # Releases made with "Compress release" on have .sql.gz; the default has a plain .sql.
-            # Try the .gz first, then the plain file (the [0-9] keeps -schema.sql out of the match).
-            if ! gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                 --pattern 'anilist-db-dump-*.sql.gz*' --dir dl 2>/dev/null; then
-              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --pattern 'anilist-db-dump-*[0-9].sql' --pattern 'anilist-db-dump-*[0-9].sql.gpg' --dir dl \
-                || { echo "No SQL file found in release $RELEASE_TAG." >&2; exit 1; }
-            fi
-            sqlfile=$(ls dl/* | head -n 1)
-            case "$sqlfile" in
-              *.gpg)
-                [ -n "$DUMP_ENCRYPTION_PASSPHRASE" ] || { echo "Dump is encrypted; set DUMP_ENCRYPTION_PASSPHRASE." >&2; exit 1; }
-                if [[ "$sqlfile" == *.sql.gz.gpg ]]; then unpack=(gunzip); else unpack=(cat); fi
-                printf '%s' "$DUMP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes \
-                  --pinentry-mode loopback --passphrase-fd 0 --decrypt "$sqlfile" | "${unpack[@]}" > restore.sql ;;
-              *.sql.gz) gunzip -c "$sqlfile" > restore.sql ;;
-              *)        cp "$sqlfile" restore.sql ;;
-            esac
+            # Releases are plain files: anilist-db-dump-<tag>.sql (the [0-9] keeps -schema.sql out of the match).
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'anilist-db-dump-*[0-9].sql' --dir dl \
+              || { echo "No .sql file found in release $RELEASE_TAG." >&2; exit 1; }
+            cp dl/*.sql restore.sql
           fi
 
           [ -s restore.sql ] || { echo "Nothing to restore." >&2; exit 1; }

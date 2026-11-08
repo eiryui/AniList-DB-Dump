@@ -74,7 +74,7 @@ jobs:
           rel='{}'
           if [ -n "$tag" ]; then
             rel=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json publishedAt,assets | jq -c --arg t "$tag" --arg r "$GITHUB_REPOSITORY" '
-              ([.assets[] | select(.name | test("\\.sql\\.gz(\\.gpg)?$"))][0]) as $a
+              ([.assets[] | select(.name | test("[0-9]\\.sql$"))][0]) as $a
               | {tag:$t, url:("https://github.com/"+$r+"/releases/tag/"+$t), published_at:.publishedAt,
                  size:($a.size // null), download_url:($a.url // null)}')
           fi

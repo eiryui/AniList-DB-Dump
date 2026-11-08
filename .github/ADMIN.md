@@ -57,7 +57,6 @@ In the repo go to **Settings > Secrets and variables > Actions** and add:
 | Secret | Required | What |
 |---|---|---|
 | `DATABASE_URL` | yes | Session pooler connection string from Supabase (Connect), port 5432 |
-| `DUMP_ENCRYPTION_PASSPHRASE` | no | Encrypts every dump file with gpg AES256 (adds `.gpg`). Skip it for public data |
 | `SOURCE_DB_URL` | no | Copy workflow only. Falls back to `DATABASE_URL` |
 | `TARGET_DB_URL` | no | Copy workflow only. The database to write into |
 
@@ -99,7 +98,6 @@ Variables (**Settings > Secrets and variables > Actions > Variables** tab, not S
 |---|---|---|
 | `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
 | `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
-| `COMPRESS_RELEASE` | `false` | Set to `true` to make the scheduled weekly release also include `.sql.gz`, `.sql.zip` and `.sql.zst`. Manual runs ignore it and use their own checkbox |
 | `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
 | `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. If unset and `public.anilist_catalog` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
 | `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
@@ -111,8 +109,8 @@ Variables (**Settings > Secrets and variables > Actions > Variables** tab, not S
 | Workflow | Trigger | Does |
 |---|---|---|
 | Weekly | cron, Saturday 00:00 UTC | Dump, then release `weekly-YYYY-MM-DD` |
-| Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule. Has a **Compress release** checkbox (off by default) |
-| `_dump.yml` | called by the two above | Shared logic. Dumps in five formats plus CSV, TSV, JSON, Parquet, SQLite and DuckDB exports, optionally encrypts, writes notes, creates the release, prunes |
+| Manual | Run workflow button | Dump, then release `manual-YYYY-MM-DD-HHMM`. Separate from Weekly, so it never resets or skips the schedule. |
+| `_dump.yml` | called by the two above | Shared logic. Dumps in several formats plus per-table CSV, TSV, JSON, JSON Lines and Parquet files, SQLite and DuckDB exports, all plain (no compression, no encryption), writes notes, creates the release, prunes |
 | Status and site | every 6 h, after any dump, on push to `site/`, `SETUP.md` or `sample/` | Checks the database, writes `stats.json`, updates the README block, deploys Pages |
 | Sample dump | after Weekly or Manual, or its own button | Commits `sample/sample.sql`: table definition plus the 20 most popular rows |
 | Copy database | button | Copies live source or a release into `TARGET_DB_URL`. Optional |
@@ -121,11 +119,11 @@ Weekly and Manual share a concurrency group, so overlapping runs queue instead o
 
 ### What a dump produces
 
-One `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the SQL files converted from the `.dump` with `pg_restore`: a plain `.sql` and `-schema.sql`. If **Compress release** is on, the plain SQL is published as `.sql.gz`, `.sql.zip` and `.sql.zst` instead of `.sql`; either way they match the `.dump` exactly.
+Nothing in a release is compressed or encrypted. Every file is published as is, so each can be opened or loaded directly. The `.dump` is made with `pg_dump --compress=0`, and the Parquet files are written without compression.
 
-**Compress release** is an option on the Manual workflow (a true/false checkbox, off by default). Off means the SQL is published as one uncompressed `.sql` and the three compressed copies are skipped, which also saves the zstd install and the compression time. Fine while each file stays well under GitHub's 2 GB asset limit. The Weekly workflow has no checkbox, so it follows the `COMPRESS_RELEASE` variable (off unless set to `true`). The release notes show which one was used. The `.tar` is a second `pg_dump` a moment later. The CSV, TSV and JSON zips are exported table by table right after, so they can differ slightly from the `.dump` if the database changes while the workflow runs (a running indexer makes this likely).
+One `pg_dump --format=custom` (`.dump`), one `--format=tar` (`.tar`), and the SQL files converted from the `.dump` with `pg_restore`: a plain `.sql` and `-schema.sql`, so those match the `.dump` exactly. The `.tar` is a second `pg_dump` a moment later. CSV, TSV, JSON Lines (`.jsonl`) and JSON (`.json`, an array with one row object per line) are exported table by table right after, one file per table named `anilist-db-dump-<tag>.<schema>.<table>.<ext>`, so they can differ slightly from the `.dump` if the database changes while the workflow runs (a running indexer makes this likely). The `.jsonl` of a table with no rows is empty and is left out of the release, because GitHub rejects 0 byte assets (its `.json` is `[]` and is kept). A release therefore has several files per table; GitHub allows 1000 assets per release and the workflow warns near that.
 
-The Parquet, SQLite and DuckDB files are written by `.github/scripts/export-formats.py` in one read-only transaction, so they match each other exactly. The workflow then counts the rows in every file and writes `MANIFEST-<tag>.json`. If the Parquet, SQLite or DuckDB counts differ from Postgres, the workflow fails and nothing is released. A difference in the `.dump`, CSV, TSV or JSON files only raises a warning and `all_match: false`. All of these hold data only: no indexes or constraints. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not.
+The Parquet, SQLite and DuckDB files are written by `.github/scripts/export-formats.py` in one read-only transaction, so they match each other exactly. The workflow then counts the rows in every file and writes `MANIFEST-<tag>.json`. If the Parquet, SQLite or DuckDB counts differ from Postgres, the workflow fails and nothing is released. A difference in the `.dump`, CSV, TSV, JSON Lines or JSON files only raises a warning and `all_match: false`. All of these hold data only: no indexes or constraints. Each file must stay under GitHub's 2 GB release asset limit; the workflow warns if one does not. Without compression the large tables are the ones to watch.
 
 ### Status page
 
@@ -141,7 +139,7 @@ Set `TARGET_DB_URL` (and optionally `SOURCE_DB_URL`), then run **Copy database**
 
 ## Private data
 
-The default assumes the database only holds public data. If it also holds anything private (users, emails, tokens, auth tables), keep the repo private, or set `DUMP_ENCRYPTION_PASSPHRASE`, and remember that `sample/sample.sql`, the README stats and the Pages site are public in a public repo. Pages on a private repo needs a paid GitHub plan and the site is still public. Do not add the indexer's own tables or credentials to `DUMP_SCHEMAS` unless you mean to publish them.
+The default assumes the database only holds public data. If it also holds anything private (users, emails, tokens, auth tables), keep the repo private, and remember that `sample/sample.sql`, the README stats and the Pages site are public in a public repo. Pages on a private repo needs a paid GitHub plan and the site is still public. Do not add the indexer's own tables or credentials to `DUMP_SCHEMAS` unless you mean to publish them.
 
 ## Troubleshooting
 

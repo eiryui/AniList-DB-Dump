@@ -10,7 +10,7 @@ Checks
   Same snapshot as Postgres, so they must match exactly (the workflow fails if not):
       Parquet, SQLite, DuckDB
   Taken a moment later, so a difference only warns (the database may have changed in between):
-      the .dump / SQL files, CSV, TSV, JSON Lines
+      the .dump / SQL files, CSV, TSV, JSON Lines, JSON
 """
 import csv
 import datetime
@@ -18,7 +18,6 @@ import json
 import os
 import sqlite3
 import sys
-import zipfile
 from pathlib import Path
 
 import duckdb
@@ -29,28 +28,28 @@ csv.field_size_limit(sys.maxsize)
 BASENAME = os.environ["BASENAME"]
 TAG = os.environ["TAG"]
 HARD = ("parquet", "sqlite", "duckdb")
-SOFT = ("dump_sql", "csv", "tsv", "json")
+SOFT = ("dump_sql", "csv", "tsv", "jsonl", "json")
 
 
 def q(ident):
     return '"' + ident.replace('"', '""') + '"'
 
 
-def zip_rows(path, member, kind):
-    """Rows in one file of a zip. Returns None if the zip or member is missing."""
+def file_rows(path, kind):
+    """Rows in one plain per-table file. Returns None if the file is missing."""
     if not path.exists():
         return None
-    with zipfile.ZipFile(path) as z:
-        if member not in z.namelist():
-            return None
-        with z.open(member) as raw:
-            if kind == "json":
-                return sum(1 for line in raw if line.strip())
-            import io
-            text = io.TextIOWrapper(raw, encoding="utf-8", newline="")
-            reader = csv.reader(text, delimiter="\t" if kind == "tsv" else ",")
-            n = sum(1 for _ in reader)
-            return max(n - 1, 0)  # minus the header row
+    if kind == "jsonl":
+        with open(path, "rb") as raw:
+            return sum(1 for line in raw if line.strip())
+    if kind == "json":
+        # A JSON array with one object per line: every line except the brackets is a row.
+        with open(path, "rb") as raw:
+            return sum(1 for line in raw if line.strip() not in (b"", b"[", b"]"))
+    with open(path, encoding="utf-8", newline="") as text:
+        reader = csv.reader(text, delimiter="\t" if kind == "tsv" else ",")
+        n = sum(1 for _ in reader)
+    return max(n - 1, 0)  # minus the header row
 
 
 def main():
@@ -67,14 +66,13 @@ def main():
 
     lite = sqlite3.connect(f"{BASENAME}.sqlite")
     duck = duckdb.connect(f"{BASENAME}.duckdb", read_only=True)
-    csv_zip, tsv_zip, json_zip = (Path(f"{BASENAME}-{k}.zip") for k in ("csv", "tsv", "json"))
 
     report, hard_bad, soft_bad = {}, [], []
     for key, expected in sorted(tables.items()):
         schema, table = key.split(".", 1)
         row = {"postgres": expected}
         row["dump_sql"] = dump_counts.get(key)
-        pf = Path("parquet") / f"{key}.parquet"
+        pf = Path(f"{BASENAME}.{key}.parquet")
         row["parquet"] = pq.ParquetFile(pf).metadata.num_rows if pf.exists() else None
         lname = table if len(schemas) == 1 else f"{schema}_{table}"
         try:
@@ -85,9 +83,8 @@ def main():
             row["duckdb"] = duck.execute(f"SELECT count(*) FROM {q(schema)}.{q(table)}").fetchone()[0]
         except duckdb.Error:
             row["duckdb"] = None
-        row["csv"] = zip_rows(csv_zip, f"{key}.csv", "csv")
-        row["tsv"] = zip_rows(tsv_zip, f"{key}.tsv", "tsv")
-        row["json"] = zip_rows(json_zip, f"{key}.jsonl", "json")
+        for kind in ("csv", "tsv", "jsonl", "json"):
+            row[kind] = file_rows(Path(f"{BASENAME}.{key}.{kind}"), kind)
 
         bad_hard = [k for k in HARD if row[k] != expected]
         bad_soft = [k for k in SOFT if row[k] != expected]
@@ -107,7 +104,7 @@ def main():
         "all_match": not hard_bad and not soft_bad,
         "notes": [
             "postgres, parquet, sqlite and duckdb come from one repeatable-read snapshot and must match exactly.",
-            "dump_sql, csv, tsv and json are taken a little later; a small difference means the database changed in between.",
+            "dump_sql, csv, tsv, jsonl and json are taken a little later; a small difference means the database changed in between.",
             "null means the table was not found in that file.",
         ],
         "tables": report,
@@ -116,7 +113,7 @@ def main():
 
     # Markdown summary, appended to the release notes by the workflow
     cols = [("postgres", "Postgres"), ("dump_sql", ".dump"), ("parquet", "Parquet"), ("sqlite", "SQLite"),
-            ("duckdb", "DuckDB"), ("csv", "CSV"), ("tsv", "TSV"), ("json", "JSON")]
+            ("duckdb", "DuckDB"), ("csv", "CSV"), ("tsv", "TSV"), ("jsonl", "JSONL"), ("json", "JSON")]
 
     def cell(row, k):
         v = row[k]

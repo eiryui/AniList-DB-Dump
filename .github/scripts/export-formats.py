@@ -3,7 +3,8 @@
 
 Needs: psycopg[binary], pyarrow, duckdb.
 Env:   DATABASE_URL, DUMP_SCHEMAS (comma separated, default "public"), BASENAME.
-Writes: <BASENAME>.sqlite, <BASENAME>.duckdb, <BASENAME>-parquet.zip, pg-counts.json
+Writes: <BASENAME>.sqlite, <BASENAME>.duckdb, <BASENAME>.<schema>.<table>.parquet (one per table,
+        uncompressed, no zip), pg-counts.json
 
 All tables are read in ONE repeatable-read, read-only transaction, so every file
 is a consistent snapshot of the same moment. Column types are mapped from
@@ -17,7 +18,6 @@ import os
 import re
 import sqlite3
 import sys
-import zipfile
 from pathlib import Path
 
 import duckdb
@@ -118,8 +118,6 @@ def main():
             sys.exit(f"::error::Invalid schema name: {s}")
 
     out = Path(".")
-    pq_dir = out / "parquet"
-    pq_dir.mkdir(exist_ok=True)
     sqlite_path, duck_path = out / f"{base}.sqlite", out / f"{base}.duckdb"
     for p in (sqlite_path, duck_path):
         p.unlink(missing_ok=True)
@@ -150,8 +148,8 @@ def main():
                 f"SELECT count(*) FROM {q(schema)}.{q(table)}").fetchone()[0]
             tbl = read_table(conn, schema, table, cols)
 
-            # Parquet
-            pq.write_table(tbl, pq_dir / f"{schema}.{table}.parquet", compression="zstd")
+            # Parquet: plain file, no compression
+            pq.write_table(tbl, out / f"{base}.{schema}.{table}.parquet", compression="none")
 
             # DuckDB (keeps real schemas)
             duck.register("src", tbl)
@@ -183,9 +181,6 @@ def main():
 
     (out / "pg-counts.json").write_text(json.dumps(
         {"snapshot_time": snapshot_time, "schemas": schemas, "tables": pg_counts}, indent=2))
-    with zipfile.ZipFile(out / f"{base}-parquet.zip", "w", zipfile.ZIP_STORED) as z:
-        for f in sorted(pq_dir.glob("*.parquet")):
-            z.write(f, f.name)  # parquet is already compressed
     print(f"Exported {count} table(s).")
 
 
