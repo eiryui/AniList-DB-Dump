@@ -1,0 +1,107 @@
+name: AniList-DB-Dump - Copy database (optional)
+
+# Copies the public schema from one database to another:
+#   live    -> pg_dump straight from SOURCE_DB_URL into TARGET_DB_URL
+#   release -> restore the .dump from one of this repo's releases into TARGET_DB_URL
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Where to copy from"
+        type: choice
+        options:
+          - live
+          - release
+        default: live
+      release_tag:
+        description: "Release tag to restore (only when source = release)"
+        type: string
+        required: false
+      wipe_target:
+        description: "DROP the public schema on the target before restoring"
+        type: boolean
+        default: false
+      confirm:
+        description: "Type COPY to confirm. This writes to TARGET_DB_URL!"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: supabase-copy
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE: ${{ inputs.source }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      WIPE: ${{ inputs.wipe_target }}
+      CONFIRM: ${{ inputs.confirm }}
+      # pg_dump client version. Must be equal to or newer than the server.
+      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
+      SOURCE_DB_URL: ${{ secrets.SOURCE_DB_URL || secrets.DATABASE_URL }}
+      TARGET_DB_URL: ${{ secrets.TARGET_DB_URL }}
+
+    steps:
+      - name: Check inputs
+        run: |
+          set -euo pipefail
+          [ "$CONFIRM" = "COPY" ] || { echo "Type COPY in the confirm box." >&2; exit 1; }
+          [ -n "$TARGET_DB_URL" ] || { echo "Secret TARGET_DB_URL is not set." >&2; exit 1; }
+          if [ "$SOURCE" = "release" ] && [ -z "$RELEASE_TAG" ]; then
+            echo "Give a release_tag when source = release." >&2; exit 1
+          fi
+          if [ "$SOURCE" = "live" ] && [ -z "$SOURCE_DB_URL" ]; then
+            echo "Set SOURCE_DB_URL (or DATABASE_URL)." >&2; exit 1
+          fi
+          if [ "$SOURCE_DB_URL" = "$TARGET_DB_URL" ]; then
+            echo "Source and target are the same database. Refusing." >&2; exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_VERSION}"
+          # The runner ships PostgreSQL 16 and it wins on PATH. Put the version we just installed first.
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
+
+      - name: Wipe target schema (optional)
+        if: ${{ inputs.wipe_target }}
+        run: |
+          set -euo pipefail
+          psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 \
+            -c 'DROP SCHEMA IF EXISTS public CASCADE;' \
+            -c 'CREATE SCHEMA public;'
+
+      - name: Copy
+        run: |
+          set -uo pipefail
+          if [ "$SOURCE" = "live" ]; then
+            pg_dump "$SOURCE_DB_URL" --schema=public --no-owner --format=custom --compress=0 \
+              --file=restore.dump
+          else
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'anilist-db-dump-*.dump' --dir dl \
+              || { echo "No .dump file found in release $RELEASE_TAG." >&2; exit 1; }
+            cp dl/*.dump restore.dump
+          fi
+
+          [ -s restore.dump ] || { echo "Nothing to restore." >&2; exit 1; }
+
+          # Not --exit-on-error on purpose: Supabase has managed objects/roles
+          # that can produce harmless "already exists" noise. Errors are listed below.
+          pg_restore --no-owner --dbname="$TARGET_DB_URL" restore.dump 2> restore.err
+          echo "---- errors reported by pg_restore (review these) ----"
+          grep -i "error" restore.err | head -n 50 || echo "none"
