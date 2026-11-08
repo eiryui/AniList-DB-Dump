@@ -236,7 +236,7 @@ jobs:
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.dump
           # tar format
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.tar
-          # plain SQL
+          # plain SQL (an error "schema public already exists" is harmless, the data still loads)
           psql "$TARGET_DB_URL" -f FILE.sql
           gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"
           # CSV, TSV, JSON, JSON Lines, Parquet: one file per table, use them directly.

@@ -66,10 +66,11 @@ Use PostgreSQL 18 client tools or newer. Older `pg_restore` versions can refuse 
 createdb anilist
 pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
 
-# or plain SQL
-psql -v ON_ERROR_STOP=1 -d anilist -f anilist-db-dump-<tag>.sql
+# or plain SQL (do not use ON_ERROR_STOP: the first line is CREATE SCHEMA public, which
+# already exists in a new database. That one error is harmless and the data loads)
+psql -d anilist -f anilist-db-dump-<tag>.sql
 # or the gzipped copy
-gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
+gunzip -c anilist-db-dump-<tag>.sql.gz | psql -d anilist
 ```
 
 No local Postgres? Run it in Docker:
@@ -180,6 +181,7 @@ The same image works on any host that runs Docker images or Python apps. Set `DA
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `schema "public" already exists` while restoring | The dump creates the `public` schema, which a new database already has | Harmless, the data still loads. Do not run `psql` with `ON_ERROR_STOP`, or drop the schema first (`DROP SCHEMA public CASCADE;`) |
 | `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 18 tools or newer, or restore the plain `.sql` instead |
 | Restore prints `role ... does not exist` | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
 | Restore fails on a hosted database through a pooler | Transaction poolers do not suit `pg_restore` | Use the direct or session connection string |
