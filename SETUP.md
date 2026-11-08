@@ -19,9 +19,10 @@ Every release has the same data in many formats. Pick by what you will load it i
 | File | Use it when |
 |---|---|
 | `*.dump` | You have PostgreSQL and want the fastest, most flexible restore (`pg_restore`). Pick this by default. Supports restoring single tables |
-| `*.sql.gz` | You want plain SQL for `psql`, or to read or process it with other tools |
-| `*.sql.zip` | Same plain SQL as `.sql.gz`, as a zip. Easier to open on Windows and macOS without extra tools |
-| `*.sql.zst` | Same plain SQL again, zstd-compressed. Smallest SQL download. Needs `zstd` (`zstd -dc FILE.sql.zst \| psql anilist`) |
+| `*.sql` | You want plain SQL for `psql` (`psql -d anilist -f FILE.sql`), or to read or process it with other tools. Uncompressed. This is what a release has by default |
+| `*.sql.gz` | Same plain SQL, gzipped. Only in releases made with **Compress release** on |
+| `*.sql.zip` | Same plain SQL as `.sql.gz`, as a zip. Easier to open on Windows and macOS without extra tools. Only in compressed releases |
+| `*.sql.zst` | Same plain SQL again, zstd-compressed. Smallest SQL download. Needs `zstd` (`zstd -dc FILE.sql.zst \| psql anilist`). Only in compressed releases |
 | `*.tar` | You specifically need pg_dump's tar format. Same content as `.dump`, bigger |
 | `*-schema.sql` | You only want the table structure, no data |
 | `*.sqlite` | You want one file you can open directly (DB Browser for SQLite, Python `sqlite3`). Arrays and JSON are stored as JSON text, dates as ISO text. Data only |
@@ -41,8 +42,8 @@ Pick the row that matches where you want the data to live. Each links to the rec
 
 | Where | Release file | Connection string for AniServe |
 |---|---|---|
-| [Local PostgreSQL or Docker](#postgresql-local-or-docker) | `.dump` (or `.sql.gz`) | `postgresql://user:pass@localhost:5432/anilist` |
-| [Hosted PostgreSQL](#hosted-postgresql) (Supabase, Neon, Railway, Render, ...) | `.dump` (or `.sql.gz`) | the service's string plus `?sslmode=require` |
+| [Local PostgreSQL or Docker](#postgresql-local-or-docker) | `.dump` (or `.sql`) | `postgresql://user:pass@localhost:5432/anilist` |
+| [Hosted PostgreSQL](#hosted-postgresql) (Supabase, Neon, Railway, Render, ...) | `.dump` (or `.sql`) | the service's string plus `?sslmode=require` |
 | [SQLite](#sqlite-no-server) | `.sqlite` | `sqlite:///data/anilist.sqlite` |
 | [DuckDB](#duckdb-and-parquet) | `.duckdb` | `duckdb:///data/anilist.duckdb` |
 | [Parquet](#duckdb-and-parquet) (files or object storage) | `-parquet.zip`, unzipped | `parquet:///data/parquet` |
@@ -69,8 +70,9 @@ createdb anilist
 pg_restore --no-owner --no-privileges -d anilist anilist-db-dump-<tag>.dump
 
 # or plain SQL
+psql -v ON_ERROR_STOP=1 -d anilist -f anilist-db-dump-<tag>.sql
+# or, if the release was made with Compress release on
 gunzip -c anilist-db-dump-<tag>.sql.gz | psql -v ON_ERROR_STOP=1 -d anilist
-# or the zip version
 unzip -p anilist-db-dump-<tag>.sql.zip | psql -v ON_ERROR_STOP=1 -d anilist
 ```
 
@@ -182,7 +184,7 @@ The same image works on any host that runs Docker images or Python apps. Set `DA
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the `.sql.gz` instead |
+| `pg_restore` says the archive version is unsupported or `server version mismatch` | Local client is older than the dump | Use PostgreSQL 17 tools or newer, or restore the plain `.sql` (or `.sql.gz`) instead |
 | Restore prints `role ... does not exist` | Grants to Supabase roles | Harmless. Use `--no-privileges` to silence it |
 | Restore fails on a hosted database through a pooler | Transaction poolers do not suit `pg_restore` | Use the direct or session connection string |
 | "Network is unreachable" or a timeout to a hosted database | Direct connection is IPv6 only and your network is IPv4 | Use the service's session pooler string |

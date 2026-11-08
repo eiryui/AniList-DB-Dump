@@ -14,4 +14,6 @@ jobs:
     uses: ./.github/workflows/_dump.yml
     with:
       kind: weekly
+      # Off unless the repo variable COMPRESS_RELEASE is set to "true"
+      compress: ${{ vars.COMPRESS_RELEASE == 'true' }}
     secrets: inherit

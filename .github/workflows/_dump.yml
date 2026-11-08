@@ -7,6 +7,11 @@ on:
         description: "weekly or manual"
         required: true
         type: string
+      compress:
+        description: "Also publish the plain SQL as .sql.gz, .sql.zip and .sql.zst. Off: publish one uncompressed .sql"
+        required: false
+        type: boolean
+        default: false
     secrets:
       DATABASE_URL:
         required: true
@@ -25,6 +30,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       KIND: ${{ inputs.kind }}
+      COMPRESS: ${{ inputs.compress }}
       PG_VERSION: ${{ vars.PG_VERSION || '17' }}
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
       KEEP_WEEKLY: ${{ vars.KEEP_WEEKLY || '0' }}
@@ -79,10 +85,11 @@ jobs:
           echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> "$GITHUB_PATH"
           "/usr/lib/postgresql/${PG_VERSION}/bin/pg_dump" --version
 
-      - name: Install zstd
+      - name: Install zstd (only when compressing)
+        if: ${{ inputs.compress }}
         run: command -v zstd >/dev/null || sudo apt-get install -y -qq zstd
 
-      - name: Dump database (custom, tar, plain SQL gz, zip and zst, schema only)
+      - name: Dump database (custom, tar, plain SQL, schema only; optionally gz, zip and zst)
         run: |
           set -euo pipefail
           args=(--no-owner)
@@ -96,16 +103,20 @@ jobs:
           pg_dump "$DATABASE_URL" "${args[@]}" --format=custom --compress=9 --file="${BASENAME}.dump"
           # 2. tar format (.tar)
           pg_dump "$DATABASE_URL" "${args[@]}" --format=tar --file="${BASENAME}.tar"
-          # 3. plain SQL made once from the .dump, then compressed three ways: .sql.gz, .sql.zip, .sql.zst
-          #    (one source file, so all three are byte-identical once decompressed)
+          # 3. plain SQL made once from the .dump
           pg_restore --no-owner --file="${BASENAME}.sql" "${BASENAME}.dump"
-          gzip -9 -c "${BASENAME}.sql" > "${BASENAME}.sql.gz"
-          zip -q -9 "${BASENAME}.sql.zip" "${BASENAME}.sql"
-          zstd -19 -T0 -q -o "${BASENAME}.sql.zst" "${BASENAME}.sql"
           # Rows per table inside the dump (one line per row in COPY blocks), for MANIFEST.json
           awk '/^COPY /{t=$2; n=0; inb=1; next} inb && /^\\\.$/{gsub(/"/,"",t); print t "\t" n; inb=0; next} inb{n++}' \
             "${BASENAME}.sql" > dump-counts.tsv
-          rm "${BASENAME}.sql"
+          if [ "$COMPRESS" = "true" ]; then
+            # Compress release ON: .sql.gz, .sql.zip, .sql.zst (one source file, so all three are
+            # byte-identical once decompressed). The plain .sql itself is not published.
+            gzip -9 -c "${BASENAME}.sql" > "${BASENAME}.sql.gz"
+            zip -q -9 "${BASENAME}.sql.zip" "${BASENAME}.sql"
+            zstd -19 -T0 -q -o "${BASENAME}.sql.zst" "${BASENAME}.sql"
+            rm "${BASENAME}.sql"
+          fi
+          # Compress release OFF (default): the uncompressed ${BASENAME}.sql is kept and published as is.
           # 4. schema-only SQL
           pg_restore --no-owner --schema-only --file="${BASENAME}-schema.sql" "${BASENAME}.dump"
 
@@ -167,7 +178,13 @@ jobs:
       - name: Encrypt (optional) and checksum
         run: |
           set -euo pipefail
-          files=("${BASENAME}.dump" "${BASENAME}.tar" "${BASENAME}.sql.gz" "${BASENAME}-schema.sql" "${BASENAME}.sql.zip" "${BASENAME}.sql.zst" "${BASENAME}-csv.zip" "${BASENAME}-tsv.zip" "${BASENAME}-json.zip" "${BASENAME}-parquet.zip" "${BASENAME}.sqlite" "${BASENAME}.duckdb" "MANIFEST-${TAG}.json")
+          files=("${BASENAME}.dump" "${BASENAME}.tar")
+          if [ "$COMPRESS" = "true" ]; then
+            files+=("${BASENAME}.sql.gz" "${BASENAME}.sql.zip" "${BASENAME}.sql.zst")
+          else
+            files+=("${BASENAME}.sql")
+          fi
+          files+=("${BASENAME}-schema.sql" "${BASENAME}-csv.zip" "${BASENAME}-tsv.zip" "${BASENAME}-json.zip" "${BASENAME}-parquet.zip" "${BASENAME}.sqlite" "${BASENAME}.duckdb" "MANIFEST-${TAG}.json")
           encrypted="no"
           : > assets.txt
           for f in "${files[@]}"; do
@@ -209,7 +226,8 @@ jobs:
               *.sql.zst*)     echo "plain SQL, zstd (psql)" ;;
               *.sql.gz*)      echo "plain SQL, gzipped (psql)" ;;
               *.sql.zip*)     echo "plain SQL, zipped (psql)" ;;
-              *)              echo "checksums" ;;
+              *.sql*)         echo "plain SQL, uncompressed (psql)" ;;
+              *)            echo "checksums" ;;
             esac
           }
           {
@@ -224,6 +242,8 @@ jobs:
             echo "| **Schemas** | ${DUMP_SCHEMAS} |"
             echo "| **Postgres server** | ${SERVER_VERSION} |"
             echo "| **Encrypted** | ${ENCRYPTED} |"
+            if [ "$COMPRESS" = "true" ]; then echo "| **Compressed SQL** | yes (.sql.gz, .sql.zip, .sql.zst) |"
+            else echo "| **Compressed SQL** | no (plain .sql) |"; fi
             echo
             echo "### Files"
             echo
@@ -246,14 +266,20 @@ jobs:
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.dump
           # tar format
           pg_restore --no-owner -d "$TARGET_DB_URL" FILE.tar
-          # plain SQL
-          gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"
-          unzip -p FILE.sql.zip | psql "$TARGET_DB_URL"
-          zstd -dc FILE.sql.zst | psql "$TARGET_DB_URL"
-          # CSV / TSV / JSON / Parquet zips: unzip them. SQLite and DuckDB files open directly.
-          # encrypted files: run gpg --decrypt FILE.gpg > FILE first
-          ```
           NOTES
+          {
+            echo "# plain SQL"
+            if [ "$COMPRESS" = "true" ]; then
+              echo 'gunzip -c FILE.sql.gz | psql "$TARGET_DB_URL"'
+              echo 'unzip -p FILE.sql.zip | psql "$TARGET_DB_URL"'
+              echo 'zstd -dc FILE.sql.zst | psql "$TARGET_DB_URL"'
+            else
+              echo 'psql "$TARGET_DB_URL" -f FILE.sql'
+            fi
+            echo "# CSV / TSV / JSON / Parquet zips: unzip them. SQLite and DuckDB files open directly."
+            echo "# encrypted files: run gpg --decrypt FILE.gpg > FILE first"
+            echo '```'
+          } >> notes.md
           sed -i 's/^          //' notes.md
 
       - name: Create release

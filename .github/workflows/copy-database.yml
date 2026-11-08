@@ -104,15 +104,24 @@ jobs:
             done
             pg_dump "$SOURCE_DB_URL" "${args[@]}" > restore.sql
           else
-            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --pattern 'anilist-db-dump-*.sql.gz*' --dir dl
-            if ls dl/*.gpg >/dev/null 2>&1; then
-              [ -n "$DUMP_ENCRYPTION_PASSPHRASE" ] || { echo "Dump is encrypted; set DUMP_ENCRYPTION_PASSPHRASE." >&2; exit 1; }
-              printf '%s' "$DUMP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes \
-                --pinentry-mode loopback --passphrase-fd 0 --decrypt dl/*.gpg | gunzip > restore.sql
-            else
-              gunzip -c dl/*.sql.gz > restore.sql
+            # Releases made with "Compress release" on have .sql.gz; the default has a plain .sql.
+            # Try the .gz first, then the plain file (the [0-9] keeps -schema.sql out of the match).
+            if ! gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                 --pattern 'anilist-db-dump-*.sql.gz*' --dir dl 2>/dev/null; then
+              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --pattern 'anilist-db-dump-*[0-9].sql' --pattern 'anilist-db-dump-*[0-9].sql.gpg' --dir dl \
+                || { echo "No SQL file found in release $RELEASE_TAG." >&2; exit 1; }
             fi
+            sqlfile=$(ls dl/* | head -n 1)
+            case "$sqlfile" in
+              *.gpg)
+                [ -n "$DUMP_ENCRYPTION_PASSPHRASE" ] || { echo "Dump is encrypted; set DUMP_ENCRYPTION_PASSPHRASE." >&2; exit 1; }
+                if [[ "$sqlfile" == *.sql.gz.gpg ]]; then unpack=(gunzip); else unpack=(cat); fi
+                printf '%s' "$DUMP_ENCRYPTION_PASSPHRASE" | gpg --batch --yes \
+                  --pinentry-mode loopback --passphrase-fd 0 --decrypt "$sqlfile" | "${unpack[@]}" > restore.sql ;;
+              *.sql.gz) gunzip -c "$sqlfile" > restore.sql ;;
+              *)        cp "$sqlfile" restore.sql ;;
+            esac
           fi
 
           [ -s restore.sql ] || { echo "Nothing to restore." >&2; exit 1; }

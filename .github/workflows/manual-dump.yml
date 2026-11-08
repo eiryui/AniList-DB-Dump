@@ -5,6 +5,12 @@ name: AniList-DB-Dump - Manual
 # so running this does NOT reset, move or skip it.
 on:
   workflow_dispatch:
+    inputs:
+      compress:
+        description: "Compress release: also publish the SQL as .sql.gz, .sql.zip and .sql.zst. Off (default) publishes one plain .sql"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -14,4 +20,5 @@ jobs:
     uses: ./.github/workflows/_dump.yml
     with:
       kind: manual
+      compress: ${{ inputs.compress }}
     secrets: inherit
