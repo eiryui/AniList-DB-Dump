@@ -23,7 +23,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       KIND: ${{ inputs.kind }}
-      PG_VERSION: ${{ vars.PG_VERSION || '17' }}
+      PG_VERSION: ${{ vars.PG_VERSION || '18' }}
       DUMP_SCHEMAS: ${{ vars.DUMP_SCHEMAS || 'public' }}
       KEEP_WEEKLY: ${{ vars.KEEP_WEEKLY || '0' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

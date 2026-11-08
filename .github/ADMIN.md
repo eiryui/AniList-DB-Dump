@@ -98,7 +98,7 @@ Variables (**Settings > Secrets and variables > Actions > Variables** tab, not S
 |---|---|---|
 | `DUMP_SCHEMAS` | `public` | Comma separated, for example `public,auth,storage` |
 | `KEEP_WEEKLY` | `0` (keep all) | Keep only the newest N weekly releases. Manual releases are never pruned |
-| `PG_VERSION` | `17` | pg_dump client version. Must be equal to or newer than the server |
+| `PG_VERSION` | `18` | pg_dump client version. Must be equal to or newer than the server |
 | `STATS_TABLE` | `public.anilist_catalog` | Table counted on the status page and sampled. `schema.table` works. If unset and `public.anilist_catalog` does not exist, the workflows use the one table that has both the ID and popularity columns. If that is ambiguous, the log lists your tables |
 | `STATS_ID_COLUMN` | `id` | ID column for lowest and highest ID, and as the sample tie-break |
 | `SAMPLE_SIZE` | `20` | Rows in `sample/sample.sql` |
@@ -146,7 +146,7 @@ The default assumes the database only holds public data. If it also holds anythi
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Dump fails with "Network is unreachable" or a connection timeout | Direct (IPv6) connection string | Use the Session pooler string on port 5432 |
-| `server version mismatch` from pg_dump | The client on PATH is older than the server (the runner ships PostgreSQL 16) | The workflows already put `/usr/lib/postgresql/$PG_VERSION/bin` first. If your server is newer than 17, raise `PG_VERSION` |
+| `server version mismatch` from pg_dump | The client on PATH is older than the server (the runner ships PostgreSQL 16) | The workflows already put `/usr/lib/postgresql/$PG_VERSION/bin` first. If your server is newer than 18, raise `PG_VERSION` |
 | 403 "Resource not accessible by integration" | Org or enterprise sets workflow permissions to read-only | The workflows request their own permissions, so first try re-running. If it persists, an org owner sets Org settings > Actions > General > Workflow permissions to read and write |
 | README or `sample/sample.sql` not updating, only a warning in the log | Branch protection or a ruleset blocks the bot push | Exempt `github-actions[bot]` or allow it to bypass |
 | Pages deploy fails | Pages source is not "GitHub Actions", or Pages is disabled for the org | Fix in Settings > Pages |
