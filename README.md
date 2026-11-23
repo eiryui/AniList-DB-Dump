@@ -10,9 +10,9 @@ Weekly dumps of the AniList database as PostgreSQL, SQLite and DuckDB files, pub
 | | |
 |---|---|
 | Database | online |
-| Total anime | 18,271 |
-| Database size | 223.8 MB |
-| Highest anime ID | 220,171 |
+| Total anime | 18,417 |
+| Database size | 223.9 MB |
+| Highest anime ID | 220,212 |
 | Latest release | [weekly-2026-11-21](https://github.com/eiryui/AniList-DB-Dump/releases/tag/weekly-2026-11-21) |
 | Next dump | 2026-11-28 00:00 UTC |
 | Landing page | https://eiryui.github.io/AniList-DB-Dump/ |
